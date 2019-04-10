@@ -12,14 +12,14 @@ module readCheckPoints
        &                 n_r_ic_maxMag,nalias,n_phi_tot,l_max,m_max,     &
        &                 minc,lMagMem,fd_stretch,fd_ratio
    use logic, only: l_rot_ma,l_rot_ic,l_SRIC,l_SRMA,l_cond_ic,l_heat,l_mag, &
-       &            l_mag_LF, l_chemical_conv, l_AB1
+       &            l_mag_LF, l_chemical_conv, l_AB1, l_diff_prec
    use blocking, only: lo_map,lmStartB,lmStopB,nLMBs,lm2l,lm2m
    use init_fields, only: start_file,inform,tOmega_ic1,tOmega_ic2,             &
        &                  tOmega_ma1,tOmega_ma2,omega_ic1,omegaOsz_ic1,        &
        &                  omega_ic2,omegaOsz_ic2,omega_ma1,omegaOsz_ma1,       &
        &                  omega_ma2,omegaOsz_ma2,tShift_ic1,tShift_ic2,        &
        &                  tShift_ma1,tShift_ma2,tipdipole, scale_b, scale_v,   &
-       &                  scale_s,scale_xi
+       &                  scale_s,scale_xi, omega_diff
    use radial_functions, only: rscheme_oc, chebt_ic, cheb_norm_ic, r
    use num_param, only: alph1, alph2
    use radial_data, only: n_r_icb, n_r_cmb
@@ -699,6 +699,7 @@ contains
             tOmega_ic2=time+tShift_ic2
             omega_ic=omega_ic1*cos(omegaOsz_ic1*tOmega_ic1) + &
             &        omega_ic2*cos(omegaOsz_ic2*tOmega_ic2)
+            if (l_diff_prec) omega_ic = omega_ic + omega_diff
             if ( rank == 0 ) then
                write(*,*)
                write(*,*) '! I use prescribed inner core rotation rate:'
@@ -726,6 +727,7 @@ contains
             tOmega_ma2=time+tShift_ma2
             omega_ma=omega_ma1*cos(omegaOsz_ma1*tOmega_ma1) + &
                      omega_ma2*cos(omegaOsz_ma2*tOmega_ma2)
+            if (l_diff_prec) omega_ma = omega_ma + omega_diff
             if ( rank == 0 ) then
                write(*,*)
                write(*,*) '! I use prescribed mantle rotation rate:'
@@ -1344,6 +1346,7 @@ contains
             tOmega_ic2=time+tShift_ic2
             omega_ic=omega_ic1*cos(omegaOsz_ic1*tOmega_ic1) + &
             &        omega_ic2*cos(omegaOsz_ic2*tOmega_ic2)
+            if (l_diff_prec) omega_ic = omega_ic + omega_diff
             if ( rank == 0 ) then
                write(*,*)
                write(*,*) '! I use prescribed inner core rotation rate:'
@@ -1371,6 +1374,7 @@ contains
             tOmega_ma2=time+tShift_ma2
             omega_ma=omega_ma1*cos(omegaOsz_ma1*tOmega_ma1) + &
             &        omega_ma2*cos(omegaOsz_ma2*tOmega_ma2)
+            if (l_diff_prec) omega_ma = omega_ma + omega_diff
             if ( rank == 0 ) then
                write(*,*)
                write(*,*) '! I use prescribed mantle rotation rate:'
