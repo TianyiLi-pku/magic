@@ -1,6 +1,6 @@
 module dtB_mod
    !
-   !  This module contains magnetic field stretching and advection terms 
+   !  This module contains magnetic field stretching and advection terms
    !  plus a separate omega-effect.
    !  It is used for movie output.
    !
@@ -10,9 +10,9 @@ module dtB_mod
    use truncation, only: nrp, n_r_maxMag, n_r_ic_maxMag, n_r_max, lm_max_dtB, &
        &                 n_r_max_dtB, n_r_ic_max_dtB, lm_max, n_cheb_max,     &
        &                 n_r_ic_max, l_max, n_phi_max, ldtBmem, l_axi
-   use communications, only: gather_all_from_lo_to_rank0, gt_OC, gt_IC, &
-       &                     r2lm_type, create_r2lm_type, destroy_r2lm_type, &
-       &                     r2lo_redist_start, r2lo_redist_wait
+   use communications, only: gather_all_from_lo_to_rank0, gt_OC, gt_IC
+   use mpi_transp, only: type_mpitransp
+   use mpi_ptop_mod, only: type_mpiptop
    use physical_parameters, only: opm,O_sr
    use radial_functions, only: O_r_ic, lambda, or2, dLlambda, rscheme_oc, &
        &                       or1, orho1
@@ -25,14 +25,16 @@ module dtB_mod
                        lm2lmP, nfs
    use radial_spectra ! rBrSpec, rBpSpec
    use fft
+#ifndef WITH_SHTNS
    use legendre_grid_to_spec, only: legTF2, legTF3
+#endif
    use constants, only: two
    use radial_der, only: get_dr
- 
+
    implicit none
- 
-   private 
- 
+
+   private
+
    !-- Global arrays!!! They are only required for some movie outputs
    !-- but we should definitely try to get rid of them
    complex(cp), public, allocatable :: PstrLM(:,:), TstrLM(:,:), PadvLM(:,:)
@@ -59,7 +61,7 @@ module dtB_mod
    complex(cp), public, allocatable :: PadvLMIC_LMloc(:,:), PdifLMIC_LMloc(:,:)
    complex(cp), public, allocatable :: TadvLMIC_LMloc(:,:), TdifLMIC_LMloc(:,:)
 
-   type(r2lm_type) :: r2lo_dtB
+   class(type_mpitransp), pointer :: r2lo_dtB
 
    public :: initialize_dtB_mod, get_dtBLMfinish, get_dtBLM, get_dH_dtBLM, &
    &         finalize_dtB_mod
@@ -75,6 +77,7 @@ contains
       ! The remaining global arrays should be suppressed, they are only
       ! needed because of some movie outputs
       !
+
       if ( l_dtBmovie ) then
          if ( rank == 0 ) then
             allocate( PstrLM(lm_max_dtB,n_r_max_dtB) )
@@ -123,30 +126,32 @@ contains
       &                 4*(ulmMag-llmMag+1)*n_r_ic_max_dtB*SIZEOF_DEF_COMPLEX
 
       allocate( dtB_Rloc_container(lm_max_dtB,nRstart:nRstop,8) )
-      TomeLM_Rloc(1:lm_max_dtB,nRstart:nRstop) => dtB_Rloc_container(:,:,1)
-      TomeRLM_Rloc(1:lm_max_dtB,nRstart:nRstop) => dtB_Rloc_container(:,:,2)
-      TstrLM_Rloc(1:lm_max_dtB,nRstart:nRstop) => dtB_Rloc_container(:,:,3)
-      TstrRLM_Rloc(1:lm_max_dtB,nRstart:nRstop) => dtB_Rloc_container(:,:,4)
-      TadvLM_Rloc(1:lm_max_dtB,nRstart:nRstop) => dtB_Rloc_container(:,:,5)
-      TadvRLM_Rloc(1:lm_max_dtB,nRstart:nRstop) => dtB_Rloc_container(:,:,6)
-      PstrLM_Rloc(1:lm_max_dtB,nRstart:nRstop) => dtB_Rloc_container(:,:,7)
-      PadvLM_Rloc(1:lm_max_dtB,nRstart:nRstop) => dtB_Rloc_container(:,:,8)
+      TomeLM_Rloc(1:,nRstart:) => dtB_Rloc_container(1:lm_max_dtB,nRstart:nRstop,1)
+      TomeRLM_Rloc(1:,nRstart:) => dtB_Rloc_container(1:lm_max_dtB,nRstart:nRstop,2)
+      TstrLM_Rloc(1:,nRstart:) => dtB_Rloc_container(1:lm_max_dtB,nRstart:nRstop,3)
+      TstrRLM_Rloc(1:,nRstart:) => dtB_Rloc_container(1:lm_max_dtB,nRstart:nRstop,4)
+      TadvLM_Rloc(1:,nRstart:) => dtB_Rloc_container(1:lm_max_dtB,nRstart:nRstop,5)
+      TadvRLM_Rloc(1:,nRstart:) => dtB_Rloc_container(1:lm_max_dtB,nRstart:nRstop,6)
+      PstrLM_Rloc(1:,nRstart:) => dtB_Rloc_container(1:lm_max_dtB,nRstart:nRstop,7)
+      PadvLM_Rloc(1:,nRstart:) => dtB_Rloc_container(1:lm_max_dtB,nRstart:nRstop,8)
       bytes_allocated = bytes_allocated+8*(nRstop-nRstart+1)*lm_max_dtB* &
       &                 SIZEOF_DEF_COMPLEX
 
       allocate( dtB_LMloc_container(llmMag:ulmMag,n_r_max_dtB,8) )
-      TomeLM_LMloc(llmMag:ulmMag,1:n_r_max_dtB) => dtB_LMloc_container(:,:,1)
-      TomeRLM_LMloc(llmMag:ulmMag,1:n_r_max_dtB) => dtB_LMloc_container(:,:,2)
-      TstrLM_LMloc(llmMag:ulmMag,1:n_r_max_dtB) => dtB_LMloc_container(:,:,3)
-      TstrRLM_LMloc(llmMag:ulmMag,1:n_r_max_dtB) => dtB_LMloc_container(:,:,4)
-      TadvLM_LMloc(llmMag:ulmMag,1:n_r_max_dtB) => dtB_LMloc_container(:,:,5)
-      TadvRLM_LMloc(llmMag:ulmMag,1:n_r_max_dtB) => dtB_LMloc_container(:,:,6)
-      PstrLM_LMloc(llmMag:ulmMag,1:n_r_max_dtB) => dtB_LMloc_container(:,:,7)
-      PadvLM_LMloc(llmMag:ulmMag,1:n_r_max_dtB) => dtB_LMloc_container(:,:,8)
+      TomeLM_LMloc(llmMag:,1:) => dtB_LMloc_container(llmMag:ulmMag,1:n_r_max_dtB,1)
+      TomeRLM_LMloc(llmMag:,1:) => dtB_LMloc_container(llmMag:ulmMag,1:n_r_max_dtB,2)
+      TstrLM_LMloc(llmMag:,1:) => dtB_LMloc_container(llmMag:ulmMag,1:n_r_max_dtB,3)
+      TstrRLM_LMloc(llmMag:,1:) => dtB_LMloc_container(llmMag:ulmMag,1:n_r_max_dtB,4)
+      TadvLM_LMloc(llmMag:,1:) => dtB_LMloc_container(llmMag:ulmMag,1:n_r_max_dtB,5)
+      TadvRLM_LMloc(llmMag:,1:) => dtB_LMloc_container(llmMag:ulmMag,1:n_r_max_dtB,6)
+      PstrLM_LMloc(llmMag:,1:) => dtB_LMloc_container(llmMag:ulmMag,1:n_r_max_dtB,7)
+      PadvLM_LMloc(llmMag:,1:) => dtB_LMloc_container(llmMag:ulmMag,1:n_r_max_dtB,8)
       bytes_allocated = bytes_allocated+8*(ulmMag-llmMag+1)*n_r_max_dtB* &
       &                 SIZEOF_DEF_COMPLEX
 
-      call create_r2lm_type(r2lo_dtB,8)
+      allocate ( type_mpiptop :: r2lo_dtB )
+
+      call r2lo_dtB%create_comm(8)
 
    end subroutine initialize_dtB_mod
 !----------------------------------------------------------------------------
@@ -161,20 +166,9 @@ contains
       deallocate( TadvLMIC_LMloc, TdifLMIC_LMloc )
       deallocate( dtB_Rloc_container, dtB_LMloc_container )
 
-      call destroy_r2lm_type(r2lo_dtB)
+      call r2lo_dtB%destroy_comm()
 
    end subroutine finalize_dtB_mod
-!----------------------------------------------------------------------------
-   subroutine dtb_from_Rloc_to_lo
-      !
-      ! MPI transpose (from LM to R ) for dtB calculations
-      !
-
-      !-- Redistribute from r-distrubuted arrays to LM-distributed arrays
-      call r2lo_redist_start(r2lo_dtB, dtB_Rloc_container, dtB_LMloc_container)
-      call r2lo_redist_wait(r2lo_dtB)
-
-   end subroutine dtb_from_Rloc_to_lo
 !----------------------------------------------------------------------------
    subroutine dtb_gather_lo_on_rank0
       !
@@ -194,7 +188,6 @@ contains
       call gather_all_from_lo_to_rank0(gt_IC,TadvLMIC_LMloc,TadvLMIC)
       call gather_all_from_lo_to_rank0(gt_IC,PdifLMIC_LMloc,PdifLMIC)
       call gather_all_from_lo_to_rank0(gt_IC,TdifLMIC_LMloc,TdifLMIC)
-
 
    end subroutine dtb_gather_lo_on_rank0
 !----------------------------------------------------------------------------
@@ -220,7 +213,7 @@ contains
       integer,  intent(in) :: n_theta_start,n_theta_block,nR
       real(cp), intent(in) :: vr(nrp,nfs),vt(nrp,nfs),vp(nrp,nfs)
       real(cp), intent(in) :: br(nrp,nfs),bt(nrp,nfs),bp(nrp,nfs)
-    
+
       !-- Output variables:
       complex(cp), intent(out) :: BtVrLM(*),BpVrLM(*)
       complex(cp), intent(out) :: BrVtLM(*),BrVpLM(*)
@@ -229,7 +222,7 @@ contains
       complex(cp), intent(out) :: BpVtCotLM(*),BtVpCotLM(*),BtVZcotLM(*)
       complex(cp), intent(out) :: BtVpSn2LM(*),BpVtSn2LM(*)
       complex(cp), intent(out) :: BtVZsn2LM(*)
-    
+
       !-- Local variables:
       integer :: n_theta,n_phi,n_theta_nhs
       real(cp) :: fac,facCot
@@ -241,9 +234,9 @@ contains
       real(cp) :: BpVtSn2(nrp,nfs),BtVpSn2(nrp,nfs)
       real(cp) :: BtVZcot(nrp,nfs),BtVZsn2(nrp,nfs)
       real(cp) :: vpAS
-    
+
       integer :: lm,l
-    
+
 #ifdef WITH_SHTNS
       !$OMP PARALLEL DO default(shared) &
       !$OMP& private(n_theta, n_phi)    &
@@ -291,7 +284,7 @@ contains
          BpVt(n_phi_max+2,n_theta)=0.0_cp
 #endif
          vpAS=vpAS/real(n_phi_max,kind=cp)
-    
+
          !---- For toroidal terms that cancel:
          do n_phi=1,n_phi_max
             BpVtCot(n_phi,n_theta)=facCot*orho1(nR)*bp(n_phi,n_theta)*vt(n_phi,n_theta)
@@ -327,7 +320,7 @@ contains
          BtVZsn2(n_phi_max+1,n_theta)=0.0_cp
          BtVZsn2(n_phi_max+2,n_theta)=0.0_cp
 #endif
-    
+
       end do
 #ifdef WITH_SHTNS
       !$OMP END PARALLEL DO
@@ -374,7 +367,7 @@ contains
          call fft_thetab(BtVZcot,-1)
          call fft_thetab(BtVZsn2,-1)
       end if
-    
+
       !-- Legendre transform: theta2l
       call legTF3(n_theta_start,BtVrLM,BpVrLM,BrVtLM,BtVr,BpVr,BrVt)
       call legTF3(n_theta_start,BrVpLM,BtVpLM,BpVtLM,BrVp,BtVp,BpVt)
@@ -399,7 +392,7 @@ contains
          BtVpSn2LM(lm)=cmplx(real(BtVpSn2LM(lm)),0.0_cp, kind=cp)
          BpVtSn2LM(lm)=cmplx(real(BpVtSn2LM(lm)),0.0_cp, kind=cp)
       end do
-    
+
    end subroutine get_dtBLM
 !-----------------------------------------------------------------------
    subroutine get_dH_dtBLM(nR,BtVrLM,BpVrLM,BrVtLM,BrVpLM, &
@@ -407,9 +400,9 @@ contains
               &            BtVpCotLM,BpVtCotLM,            &
               &            BtVpSn2LM,BpVtSn2LM)
       !
-      !  Purpose of this routine is to calculate theta and phi          
-      !  derivative related terms of the magnetic production and         
-      !  advection terms and store them.                                  
+      !  Purpose of this routine is to calculate theta and phi
+      !  derivative related terms of the magnetic production and
+      !  advection terms and store them.
       !
 
       !-- Input variables:
@@ -420,11 +413,11 @@ contains
       complex(cp), intent(in) :: BtVpCotLM(*),BpVtCotLM(*)
       complex(cp), intent(in) :: BtVpSn2LM(*),BpVtSn2LM(*)
       complex(cp), intent(in) :: BrVZLM(*),BtVZLM(*)
-    
+
       !-- Local variables:
       integer :: l,m,lm,lmP,lmPS,lmPA
       real(cp) :: fac
-    
+
       PstrLM_Rloc(1,nR)=0.0_cp
       PadvLM_Rloc(1,nR)=0.0_cp
       do lm=2,lm_max
@@ -447,9 +440,9 @@ contains
             &    - dTheta1A(lm)*BrVtLM(lmPA) + dPhi(lm)*BrVpLM(lmP) )
          end if
       end do
-    
+
       !--- Poloidal advection and stretching term finished for radial level nR !
-    
+
       TstrLM_Rloc(1,nR) =0.0_cp
       TstrRLM_Rloc(1,nR)=0.0_cp
       do lm=2,lm_max
@@ -489,7 +482,7 @@ contains
             &                            dPhi(lm)*BrVtLM(lmP)  )
          end if
       end do
-    
+
       TadvLM_Rloc(1,nR) =0.0_cp
       TadvRLM_Rloc(1,nR)=0.0_cp
       do lm=2,lm_max
@@ -529,7 +522,7 @@ contains
             &               dPhi(lm)*BtVrLM(lmP)   )
          end if
       end do
-    
+
       !--- TomeLM same as TstrLM but where ever Vp appeared
       !    it is replaced by its axisymmetric contribution VZ:
       TomeLM_Rloc(1,nR) =0.0_cp
@@ -555,7 +548,7 @@ contains
             TomeRLM_Rloc(lm,nR)=-fac*dTheta1A(lm)*BrVZLM(lmPA)
          end if
       end do
-    
+
    end subroutine get_dH_dtBLM
 !------------------------------------------------------------------------------
    subroutine get_dtBLMfinish(time,n_time_step,omega_ic,         &
@@ -578,16 +571,16 @@ contains
       complex(cp), intent(in) :: dj_ic(llmMag:ulmMag,n_r_ic_maxMag)
       complex(cp), intent(in) :: ddj_ic(llmMag:ulmMag,n_r_ic_maxMag)
       logical,     intent(in) :: l_frame
-    
+
       !-- Local variables:
       integer :: nR
       complex(cp) :: work_LMloc(llmMag:ulmMag,n_r_max)
       integer :: l,m,lm
-      
+
 
       !-- Bring some array from rLoc to LMloc
-      call dtB_from_Rloc_to_lo()
-    
+      call r2lo_dtB%transp_r2lm(dtB_Rloc_container, dtB_LMloc_container)
+
       if ( l_cond_ic ) then
          do nR=1,n_r_ic_max
             do lm=llm,ulm
@@ -602,7 +595,7 @@ contains
             end do
          end do
       end if
-    
+
       do nR=1,n_r_max
          do lm=llm,ulm
             l=lo_map%lm2l(lm)
@@ -614,10 +607,10 @@ contains
             &    dLh(st_map%lm2(l,m))*or2(nR)*aj(lm,nR) )
          end do
       end do
-         
+
       call get_dr(TomeRLM_LMloc(llmMag:,:),work_LMloc(llmMag:,:),ulmMag-llmMag+1, &
            &      1,ulmMag-llmMag+1,n_r_max,rscheme_oc,nocopy=.true.)
-         
+
       do nR=1,n_r_max
          do lm=llm,ulm
             TomeLM_LMloc(lm,nR)=TomeLM_LMloc(lm,nR)+or1(nR)*work_LMloc(lm,nR)
@@ -626,16 +619,16 @@ contains
 
       call get_dr(TstrRLM_LMloc(llmMag:,:),work_LMloc(llmMag:,:),ulmMag-llmMag+1, &
            &      1,ulmMag-llmMag+1,n_r_max,rscheme_oc,nocopy=.true.)
-    
+
       do nR=1,n_r_max
          do lm=llm,ulm
             TstrLM_LMloc(lm,nR)=TstrLM_LMloc(lm,nR)+or1(nR)*work_LMloc(lm,nR)
          end do
       end do
-         
+
       call get_dr(TadvRLM_LMloc(llmMag:,:),work_LMloc(llmMag:,:),ulmMag-llmMag+1, &
            &      1,ulmMag-llmMag+1,n_r_max,rscheme_oc,nocopy=.true.)
-      
+
       do nR=1,n_r_max
          do lm=llm,ulm
             TadvLM_LMloc(lm,nR)=TadvLM_LMloc(lm,nR)+or1(nR)*work_LMloc(lm,nR)
@@ -669,7 +662,7 @@ contains
          !-- If movie is required, let's gather everything on rank 0
          call dtb_gather_lo_on_rank0()
       end if
-    
+
    end subroutine get_dtBLMfinish
 !------------------------------------------------------------------------------
 end module dtB_mod

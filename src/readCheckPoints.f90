@@ -792,7 +792,7 @@ contains
       !-- Local:
       integer :: minc_old,n_phi_tot_old,n_theta_max_old,nalias_old
       integer :: l_max_old,n_r_max_old
-      integer :: n_r_ic_max_old
+      integer :: n_r_ic_max_old, io_status
       real(cp) :: pr_old,ra_old,pm_old
       real(cp) :: raxi_old,sc_old
       real(cp) :: ek_old,radratio_old
@@ -814,7 +814,7 @@ contains
       real(cp) :: r_icb_old, r_cmb_old
       integer :: n_in, n_in_2, version
 
-      complex(cp), allocatable :: workOld(:)
+      complex(cp), allocatable :: workOld(:,:)
       complex(cp), allocatable :: work(:,:)
       real(cp), allocatable :: r_old(:)
 
@@ -830,8 +830,27 @@ contains
          inquire(file=start_file, exist=startfile_does_exist)
 
          if ( startfile_does_exist ) then
+
+            !-- First try without stream
             open(newunit=n_start_file, file=start_file, status='old', &
             &    form='unformatted')
+
+            read(n_start_file, iostat=io_status) version
+
+            if ( io_status /= 0 ) then
+               write(*,*) '! The checkpoint file does not have record markers'
+               write(*,*) '! I try to read it with a stream access...'
+               close(n_start_file)
+
+               !-- Second attempt without stream
+               open(newunit=n_start_file, file=start_file, status='old', &
+               &    form='unformatted', access='stream')
+
+               read(n_start_file, iostat=io_status) version
+               if ( io_status /= 0 ) then
+                  call abortRun('! The restart file has a wrong formatting !')
+               end if
+            end if
          else
             call abortRun('! The restart file does not exist !')
          end if
@@ -842,7 +861,6 @@ contains
             l_AB1=.true.
          end if
 
-         read(n_start_file) version
          read(n_start_file) time, dt_old, n_time_step
          read(n_start_file) ra_old,pr_old,raxi_old,sc_old,pm_old, &
          &                  ek_old,radratio_old,sigma_ratio_old
@@ -979,9 +997,9 @@ contains
 
       !-- Allocate arrays
       if ( rank == 0 ) then
-         allocate( work(lm_max,n_r_max), workOld(n_data_oldP) )
+         allocate( work(lm_max,n_r_max), workOld(lm_max_old,n_r_max_old) )
       else
-         allocate( work(1,n_r_max), workOld(1) )
+         allocate( work(1,n_r_max), workOld(1,1) )
       end if
 
       !-- Read the poloidal flow
@@ -989,7 +1007,7 @@ contains
          work(:,:)=zero
          read(n_start_file) workOld
          call mapOneField( workOld,scale_v,r_old,lm2lmo,n_r_max_old, &
-              &            lm_max_old,n_r_maxL,n_r_max,.false.,.false.,work )
+              &            n_r_maxL,n_r_max,.false.,.false.,work )
          !-- Cancel the spherically symmetric part for poloidal flow
          work(1,:)=zero
       end if
@@ -1002,7 +1020,7 @@ contains
          work(:,:)=zero
          read(n_start_file) workOld
          call mapOneField( workOld,scale_v,r_old,lm2lmo,n_r_max_old, &
-              &            lm_max_old,n_r_maxL,n_r_max,.true.,.false.,work )
+              &            n_r_maxL,n_r_max,.true.,.false.,work )
          !-- Cancel the spherically symmetric part for poloidal flow
          work(1,:)=zero
       end if
@@ -1015,7 +1033,7 @@ contains
          work(:,:)=zero
          read(n_start_file) workOld
          call mapOneField( workOld,scale_v,r_old,lm2lmo,n_r_max_old, &
-              &            lm_max_old,n_r_maxL,n_r_max,.false.,.false.,work )
+              &            n_r_maxL,n_r_max,.false.,.false.,work )
          !-- Cancel the spherically symmetric part for toroidal flow
          work(1,:)=zero
       end if
@@ -1028,7 +1046,7 @@ contains
          work(:,:)=zero
          read(n_start_file) workOld
          call mapOneField( workOld,scale_v,r_old,lm2lmo,n_r_max_old, &
-              &            lm_max_old,n_r_maxL,n_r_max,.true.,.false.,work )
+              &            n_r_maxL,n_r_max,.true.,.false.,work )
          !-- Cancel the spherically symmetric part for toroidal flow
          work(1,:)=zero
       end if
@@ -1041,7 +1059,7 @@ contains
          work(:,:)=zero
          read(n_start_file) workOld
          call mapOneField( workOld,scale_v,r_old,lm2lmo,n_r_max_old, &
-              &            lm_max_old,n_r_maxL,n_r_max,.false.,.false.,work )
+              &            n_r_maxL,n_r_max,.false.,.false.,work )
       end if
       do nR=1,n_r_max
          call scatter_from_rank0_to_lo(work(:,nR),p(llm:ulm,nR))
@@ -1052,7 +1070,7 @@ contains
          work(:,:)=zero
          read(n_start_file) workOld
          call mapOneField( workOld,scale_v,r_old,lm2lmo,n_r_max_old, &
-              &            lm_max_old,n_r_maxL,n_r_max,.true.,.false.,work )
+              &            n_r_maxL,n_r_max,.true.,.false.,work )
       end if
       do nR=1,n_r_max
          call scatter_from_rank0_to_lo(work(:,nR),dpdt(llm:ulm,nR))
@@ -1064,7 +1082,7 @@ contains
             work(:,:)=zero
             read(n_start_file) workOld
             call mapOneField( workOld,scale_s,r_old,lm2lmo,n_r_max_old, &
-                 &            lm_max_old,n_r_maxL,n_r_max,.false.,.false.,work )
+                 &            n_r_maxL,n_r_max,.false.,.false.,work )
          end if
          if ( l_heat ) then
             do nR=1,n_r_max
@@ -1077,7 +1095,7 @@ contains
             work(:,:)=zero
             read(n_start_file) workOld
             call mapOneField( workOld,scale_s,r_old,lm2lmo,n_r_max_old, &
-                 &            lm_max_old,n_r_maxL,n_r_max,.true.,.false.,work )
+                 &            n_r_maxL,n_r_max,.true.,.false.,work )
          end if
          if ( l_heat ) then
             do nR=1,n_r_max
@@ -1092,7 +1110,7 @@ contains
             work(:,:)=zero
             read(n_start_file) workOld
             call mapOneField( workOld,scale_xi,r_old,lm2lmo,n_r_max_old, &
-                 &            lm_max_old,n_r_maxL,n_r_max,.false.,.false.,work )
+                 &            n_r_maxL,n_r_max,.false.,.false.,work )
          end if
          if ( l_chemical_conv ) then
             do nR=1,n_r_max
@@ -1105,7 +1123,7 @@ contains
             work(:,:)=zero
             read(n_start_file) workOld
             call mapOneField( workOld,scale_xi,r_old,lm2lmo,n_r_max_old, &
-                 &            lm_max_old,n_r_maxL,n_r_max,.true.,.false.,work )
+                 &            n_r_maxL,n_r_max,.true.,.false.,work )
          end if
          if ( l_chemical_conv ) then
             do nR=1,n_r_max
@@ -1131,7 +1149,7 @@ contains
                work(:,:)=zero
                read(n_start_file) workOld
                call mapOneField(workOld,scale_b,r_old,lm2lmo,n_r_max_old, &
-                    &           lm_max_old,n_r_maxL,n_r_max,.false.,.false.,work)
+                    &           n_r_maxL,n_r_max,.false.,.false.,work)
                !-- Cancel the spherically-symmetric part
                work(1,:)=zero
             end if
@@ -1144,7 +1162,7 @@ contains
                work(:,:)=zero
                read(n_start_file) workOld
                call mapOneField(workOld,scale_b,r_old,lm2lmo,n_r_max_old,   &
-                    &           lm_max_old,n_r_maxL,n_r_max,.true.,.false.,work)
+                    &           n_r_maxL,n_r_max,.true.,.false.,work)
                !-- Cancel the spherically-symmetric part
                work(1,:)=zero
             end if
@@ -1157,7 +1175,7 @@ contains
                work(:,:)=zero
                read(n_start_file) workOld
                call mapOneField(workOld,scale_b,r_old,lm2lmo,n_r_max_old,   &
-                    &           lm_max_old,n_r_maxL,n_r_max,.false.,.false.,work)
+                    &           n_r_maxL,n_r_max,.false.,.false.,work)
                !-- Cancel the spherically-symmetric part
                work(1,:)=zero
             end if
@@ -1170,7 +1188,7 @@ contains
                work(:,:)=zero
                read(n_start_file) workOld
                call mapOneField(workOld,scale_b,r_old,lm2lmo,n_r_max_old,   &
-                    &           lm_max_old,n_r_maxL,n_r_max,.true.,.false.,work)
+                    &           n_r_maxL,n_r_max,.true.,.false.,work)
                !-- Cancel the spherically-symmetric part
                work(1,:)=zero
             end if
@@ -1192,9 +1210,9 @@ contains
 
                      n_r_ic_maxL = max(n_r_ic_max,n_r_ic_max_old)
                      allocate( work(lm_max,n_r_ic_max) )
-                     allocate( workOld(n_data_oldP) )
+                     allocate( workOld(lm_max_old,n_r_ic_max_old) )
                   else
-                     allocate( work(1,n_r_ic_max), workOld(1) )
+                     allocate( work(1,n_r_ic_max), workOld(1,1) )
                   end if
 
                   !-- Read the inner core poloidal magnetic field
@@ -1202,9 +1220,8 @@ contains
                      work(:,:)=zero
                      read(n_start_file) workOld
                      call mapOneField( workOld,scale_b,r_old,lm2lmo,     &
-                          &            n_r_ic_max_old,lm_max_old,        &
-                          &            n_r_ic_maxL,n_r_ic_max,.false.,   &
-                          &            .true.,work )
+                          &            n_r_ic_max_old,n_r_ic_maxL,       &
+                          &            n_r_ic_max,.false.,.true.,work )
                      !-- Cancel the spherically-symmetric part
                      work(1,:)=zero
                   end if
@@ -1217,9 +1234,8 @@ contains
                      work(:,:)=zero
                      read(n_start_file) workOld
                      call mapOneField( workOld,scale_b,r_old,lm2lmo,    &
-                          &            n_r_ic_max_old,lm_max_old,       &
-                          &            n_r_ic_maxL,n_r_ic_max,.true.,   &
-                          &            .true.,work )
+                          &            n_r_ic_max_old,n_r_ic_maxL,      &
+                          &            n_r_ic_max,.true.,.true.,work )
                      !-- Cancel the spherically-symmetric part
                      work(1,:)=zero
                   end if
@@ -1231,8 +1247,8 @@ contains
                   if ( rank == 0 ) then
                      work(:,:)=zero
                      read(n_start_file) workOld
-                     call mapOneField( workOld,scale_b,r_old,lm2lmo,         &
-                          &            n_r_ic_max_old,lm_max_old,n_r_ic_maxL,&
+                     call mapOneField( workOld,scale_b,r_old,lm2lmo,     &
+                          &            n_r_ic_max_old,n_r_ic_maxL,       &
                           &            n_r_ic_max,.false.,.true.,work )
                      !-- Cancel the spherically-symmetric part
                      work(1,:)=zero
@@ -1245,8 +1261,8 @@ contains
                   if ( rank == 0 ) then
                      work(:,:)=zero
                      read(n_start_file) workOld
-                     call mapOneField( workOld,scale_b,r_old,lm2lmo,         &
-                          &            n_r_ic_max_old,lm_max_old,n_r_ic_maxL,&
+                     call mapOneField( workOld,scale_b,r_old,lm2lmo,     &
+                          &            n_r_ic_max_old,n_r_ic_maxL,       &
                           &            n_r_ic_max,.true.,.true.,work )
                      !-- Cancel the spherically-symmetric part
                      work(1,:)=zero
@@ -1445,7 +1461,7 @@ contains
          write(*,'(/,'' ! Mapping onto new grid.'')')
 
          if ( mod(minc_old,minc) /= 0 )                                &
-         &     write(6,'('' ! Warning: Incompatible old/new minc= '',2i3)')
+         &     write(*,'('' ! Warning: Incompatible old/new minc= '',2i3)')
 
          lm_max_old=m_max_old*(l_max_old+1)/minc_old -                &
          &          m_max_old*(m_max_old-minc_old)/(2*minc_old) +     &
@@ -1502,15 +1518,15 @@ contains
 
    end subroutine getLm2lmO
 !------------------------------------------------------------------------------
-   subroutine mapOneField( wo,scale_w,r_old,lm2lmo,n_r_max_old,   &
-              &            lm_max_old,n_r_maxL,dim1,lBc1,l_IC,w )
+   subroutine mapOneField( wo,scale_w,r_old,lm2lmo,n_r_max_old,n_r_maxL,dim1,&
+              &            lBc1,l_IC,w )
 
       !--- Input variables
-      integer,     intent(in) :: n_r_max_old,lm_max_old,dim1
+      integer,     intent(in) :: n_r_max_old,dim1
       integer,     intent(in) :: n_r_maxL
       logical,     intent(in) :: lBc1,l_IC
       integer,     intent(in) :: lm2lmo(lm_max)
-      complex(cp), intent(in) :: wo(:)
+      complex(cp), intent(in) :: wo(:,:)
       real(cp),    intent(in) :: r_old(:)
       real(cp),    intent(in) :: scale_w
 
@@ -1518,9 +1534,10 @@ contains
       complex(cp), intent(out) :: w(lm_max,dim1)
 
       !--- Local variables
-      integer :: lm,lmo,n,nR,lmStart,lmStop,nLMB
+      integer :: lm,lmo,lmStart,lmStop,nLMB
       complex(cp) :: woR(n_r_maxL)
 
+      !$omp parallel do default(shared) private(nLMB,lmStart,lmStop,lm,lmo,woR)
       do nLMB=1,nLMBs ! Blocking of loop over all (l,m)
          lmStart=lmStartB(nLMB)
          lmStop =lmStopB(nLMB)
@@ -1533,27 +1550,18 @@ contains
                &    rscheme_oc%order_boundary /= rscheme_oc_old%order_boundary&
                &    .or. rscheme_oc%version /= rscheme_oc_old%version ) then
 
-                  do nR=1,n_r_max_old  ! copy on help arrays
-                     n=lmo+(nR-1)*lm_max_old
-                     woR(nR)=wo(n)
-                  end do
+                  woR(1:n_r_max_old)=wo(lmo,:)
                   call mapDataR(woR,r_old,dim1,n_r_max_old,n_r_maxL,lBc1,l_IC)
-                  do nR=1,dim1
-                     w(lm,nR)=scale_w*woR(nR)
-                  end do
+                  w(lm,:)=scale_w*woR(1:dim1)
                else
-                  do nR=1,dim1
-                     n=lmo+(nR-1)*lm_max_old
-                     w(lm,nR)=scale_w*wo(n)
-                  end do
+                  w(lm,:)=scale_w*wo(lmo,:)
                end if
             else
-               do nR=1,dim1
-                  w(lm,nR)=zero
-               end do
+               w(lm,:)=zero
             end if
          end do
       end do
+      !$omp end parallel do
 
    end subroutine mapOneField
 !------------------------------------------------------------------------------
@@ -1593,7 +1601,6 @@ contains
          allocate( xioR(n_r_maxL) )
          bytes_allocated = bytes_allocated + n_r_maxL*SIZEOF_DEF_COMPLEX
       end if
-      write(*,"(A,I12)") "maximal allocated bytes in mapData are ",bytes_allocated
 
       !PERFON('mD_map')
       do nLMB=1,nLMBs ! Blocking of loop over all (l,m)
@@ -1711,7 +1718,6 @@ contains
       allocate( woR(n_r_maxL),zoR(n_r_maxL) )
       allocate( poR(n_r_maxL),soR(n_r_maxL) )
       bytes_allocated = bytes_allocated + 4*n_r_maxL*SIZEOF_DEF_COMPLEX
-      write(*,"(A,I12)") "maximal allocated bytes in mapData are ",bytes_allocated
 
       !PERFON('mD_map')
       do nLMB=1,nLMBs ! Blocking of loop over all (l,m)

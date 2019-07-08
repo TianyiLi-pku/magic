@@ -472,6 +472,7 @@ class MagicSpectrum(MagicSetup):
                 else:
                     ax.set_xlabel('m+1')
 
+
 class MagicSpectrum2D(MagicSetup):
     """
     This class can be used to read and display 2-D spectra in the :math:`(r,\ell)`
@@ -488,7 +489,8 @@ class MagicSpectrum2D(MagicSetup):
     """
 
     def __init__(self, datadir='.', field='e_mag', iplot=True, ispec=None,
-                 tag=None, cm='jet', levels=33, precision='Float64', ave=False):
+                 tag=None, cm='jet', levels=33, precision=np.float64,
+                 ave=False):
         """
         :param field: the spectrum you want to plot, 'e_kin' for kinetic
                       energy, 'e_mag' for magnetic
@@ -568,7 +570,10 @@ class MagicSpectrum2D(MagicSetup):
         file = npfile(filename, endian='B')
 
         if self.version == 'snap':
-            out = file.fort_read('%s,3i4' % precision)[0]
+            if precision == np.float64:
+                out = file.fort_read('f8,3i4')[0]
+            else:
+                out = file.fort_read('f4,3i4')[0]
             self.time = out[0]
             self.n_r_max, self.l_max, self.minc = out[1]
         elif self.version == 'ave':

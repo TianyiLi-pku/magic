@@ -10,18 +10,18 @@ module fields_average_mod
    use radial_functions, only: chebt_ic, chebt_ic_even, r, dr_fac_ic, &
        &                       rscheme_oc
    use blocking,only: lmStartB, lmStopB, sizeThetaB, nThetaBs, lm2, nfs
-   use horizontal_data, only: Plm, dPlm, dLh
    use logic, only: l_mag, l_conv, l_save_out, l_heat, l_cond_ic, &
        &            l_chemical_conv
    use kinetic_energy, only: get_e_kin
    use magnetic_energy, only: get_e_mag
-   use output_data, only: tag, n_log_file, log_file, n_graphs, l_max_cmb, &
-       &                  n_graph_file, graph_file
+   use output_data, only: tag, n_log_file, log_file, n_graphs, l_max_cmb
    use parallel_mod, only: rank
 #ifdef WITH_SHTNS
    use shtns
 #else
+   use horizontal_data, only: Plm, dPlm, dLh
    use fft, only: fft_thetab
+   use legendre_spec_to_grid, only: legTF
 #endif
    use constants, only: zero, vol_oc, vol_ic, one
    use LMLoop_data, only: llm,ulm,llmMag,ulmMag
@@ -29,9 +29,8 @@ module fields_average_mod
        &                     gather_all_from_lo_to_rank0,gt_OC,gt_IC
    use out_coeff, only: write_Bcmb, write_Pot
    use spectra, only: spectrum, spectrum_temp
-   use graphOut_mod, only: graphOut, graphOut_IC
+   use graphOut_mod, only: graphOut, graphOut_IC, n_graph_file
    use leg_helper_mod, only: legPrep
-   use legendre_spec_to_grid, only: legTF
    use radial_der_even, only: get_drNS_even, get_ddrNS_even
    use radial_der, only: get_dr
    use fieldsLast, only: dwdtLast_LMloc, dpdtLast_LMloc, dzdtLast_lo,     &
@@ -39,11 +38,11 @@ module fields_average_mod
        &                 djdtLast_LMloc, dbdt_icLast_LMloc,               &
        &                 djdt_icLast_LMloc
    use storeCheckPoints, only: store
- 
+
    implicit none
- 
+
    private
- 
+
    complex(cp), allocatable :: w_ave(:,:)
    complex(cp), allocatable :: z_ave(:,:)
    complex(cp), allocatable :: s_ave(:,:)
@@ -59,7 +58,7 @@ module fields_average_mod
    complex(cp), allocatable :: w_ave_global(:), dw_ave_global(:)
    complex(cp), allocatable :: z_ave_global(:), s_ave_global(:)
    complex(cp), allocatable :: p_ave_global(:), xi_ave_global(:)
- 
+
    public :: initialize_fields_average_mod, fields_average, &
    &         finalize_fields_average_mod
 
@@ -181,8 +180,11 @@ contains
       real(cp) :: Xir(nrp,nfs)                        ! chemical composition
 
       !----- Help arrays for fields:
+#ifndef WITH_SHTNS
       complex(cp) :: dLhb(lm_max),bhG(lm_max),bhC(lm_max)
       complex(cp) :: dLhw(lm_max),vhG(lm_max),vhC(lm_max)
+      integer :: nThetaB, nThetaStart
+#endif
 
       !----- Energies of time average field:
       real(cp) :: e_kin_p_ave,e_kin_t_ave
@@ -194,9 +196,10 @@ contains
       real(cp) :: e_mag_os_ave,e_mag_as_os_ave
       real(cp) :: Dip,DipCMB,e_cmb,elsAnel
 
-      integer :: lm,nR,nThetaB,nThetaStart
+      integer :: lm, nR
       integer :: n_e_sets,n_spec
 
+      character(len=72) :: graph_file
       character(len=80) :: outFile
       integer :: nOut,n_cmb_sets
 
@@ -210,7 +213,7 @@ contains
 
       !-- Initialise average for first time step:
 
-      if ( nAve == 1 ) then  
+      if ( nAve == 1 ) then
 
          !zero=zero
          if ( n_graphs > 0 ) then
@@ -375,7 +378,7 @@ contains
          end if
 
          !----- Write averaged energies into log-file at end of run:
-         if ( l_stop_time ) then 
+         if ( l_stop_time ) then
             !----- Calculate energies of averaged field:
             n_e_sets=1
             call get_e_kin(time,.false.,.true.,n_e_sets, &
@@ -421,15 +424,15 @@ contains
                &     e_mag_t_as_ave,(e_mag_p_as_ave+e_mag_t_as_ave)/vol_oc
                write(n_log_file,'(1P,'' !  IC Mag  AS energies:'',4ES16.6)') &
                &    (e_mag_p_as_ic_ave+e_mag_t_as_ic_ave),e_mag_p_as_ic_ave, &
-               &     e_mag_t_as_ic_ave,(e_mag_p_as_ic_ave+e_mag_t_as_ic_ave) & 
+               &     e_mag_t_as_ic_ave,(e_mag_p_as_ic_ave+e_mag_t_as_ic_ave) &
                &     /vol_ic
                write(n_log_file,'(1P,'' !  OC Mag  AS energies:'',ES16.6)')  &
                &     e_mag_os_ave
                write(n_log_file,'(1P,'' !  Relative ax. dip. E:'',ES16.6)')  &
-               &     Dip           
+               &     Dip
             end if
          end if ! End of run ?
-            
+
          !----- Construct name of graphic file and open it:
          ! For the graphic file of the average fields, we gather them
          ! on rank 0 and use the old serial output routine.
@@ -469,17 +472,6 @@ contains
             end if
 
             if ( rank == 0 ) then
-               if ( l_mag ) then
-                  call legPrep(b_ave_global,db_ave_global,db_ave_global, &
-                       &       aj_ave_global,aj_ave_global,dLh,lm_max,   &
-                       &       l_max,minc,r(nR),.false.,.true.,          &
-                       &       dLhb,bhG,bhC,dLhb,bhG,bhC)
-               end if
-               call legPrep(w_ave_global,dw_ave_global,dw_ave_global, &
-                    &       z_ave_global,z_ave_global,dLh,lm_max,     &
-                    &       l_max,minc,r(nR),.false.,.true.,          &
-                    &       dLhw,vhG,vhC,dLhb,bhG,bhC)
-
 #ifdef WITH_SHTNS
                if ( l_mag ) then
                   call torpol_to_spat(b_ave_global, db_ave_global, &
@@ -495,7 +487,18 @@ contains
                call graphOut(time, nR, Vr, Vt, Vp, Br, Bt, Bp, Sr, Prer, &
                &             Xir, 1, sizeThetaB, lGraphHeader)
 #else
-               do nThetaB=1,nThetaBs  
+               if ( l_mag ) then
+                  call legPrep(b_ave_global,db_ave_global,db_ave_global, &
+                       &       aj_ave_global,aj_ave_global,dLh,lm_max,   &
+                       &       l_max,minc,r(nR),.false.,.true.,          &
+                       &       dLhb,bhG,bhC,dLhb,bhG,bhC)
+               end if
+               call legPrep(w_ave_global,dw_ave_global,dw_ave_global, &
+                    &       z_ave_global,z_ave_global,dLh,lm_max,     &
+                    &       l_max,minc,r(nR),.false.,.true.,          &
+                    &       dLhw,vhG,vhC,dLhb,bhG,bhC)
+
+               do nThetaB=1,nThetaBs
                   nThetaStart=(nThetaB-1)*sizeThetaB+1
 
                   !-------- Transform to grid space:
@@ -552,7 +555,7 @@ contains
             if ( rank == 0 ) then
                call graphOut_IC(b_ic_ave_global,db_ic_ave_global,   &
                     &           ddb_ic_ave_global,aj_ic_ave_global, &
-                    &           dj_ic_ave_global,bICB)
+                    &           dj_ic_ave_global,bICB,l_avg=.true.)
             end if
          end if
 

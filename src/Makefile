@@ -298,6 +298,8 @@ timing.o: timing.f90
 
 precision_mod.o       : mpimod.o
 truncation.o          : precision_mod.o logic.o useful.o
+signals.o             : precision_mod.o char_manip.o output_data.o\
+                        parallel.o
 magnetic_energy.o     : truncation.o blocking.o horizontal.o\
                         phys_param.o num_param.o constants.o radial.o\
                         logic.o output_data.o movie.o special.o\
@@ -372,7 +374,7 @@ magic.o               : truncation.o num_param.o parallel.o logic.o\
 step_time.o           : truncation.o blocking.o phys_param.o\
                         num_param.o radial_data.o mem_alloc.o\
                         logic.o output_data.o output.o movie.o\
-                        char_manip.o timing.o courant.o\
+                        char_manip.o timing.o courant.o signals.o\
                         radialLoop.o nonlinear_bcs.o\
                         LMLoop.o dt_fieldsLast.o \
 			c_utils.o useful.o probes.o
@@ -406,8 +408,10 @@ LMLoop.o              : truncation.o blocking.o parallel.o\
                         logic.o radial_data.o updateWPS.o\
                         output_data.o fields.o dt_fieldsLast.o\
                         updateS.o updateB.o mem_alloc.o updateXI.o\
-                        updateZ.o updateWP.o timing.o LMLoop_data.o\
-                        communications.o debugging.o updateWPT.o
+                        updateZ.o updateWP.o LMLoop_data.o\
+                        debugging.o updateWPT.o
+mpi_transpose.o       : precision_mod.o truncation.o radial_data.o LMLoop_data.o\
+                        mem_alloc.o parallel.o blocking.o
 debugging.o           : precision_mod.o
 timing.o              : parallel.o precision_mod.o
 LMLoop_data.o         : parallel.o blocking.o logic.o
@@ -429,7 +433,7 @@ output.o              : truncation.o blocking.o phys_param.o\
                         communications.o out_coeff.o outPar.o dtB.o\
                         store_movie_IC.o RMS.o
 communications.o      : blocking.o parallel.o LMLoop_data.o truncation.o\
-			radial_data.o mem_alloc.o
+			radial_data.o mem_alloc.o mpi_transpose.o
 outPar.o              : truncation.o blocking.o phys_param.o\
                         logic.o radial.o output_data.o radial_data.o\
                         horizontal.o fields.o legendre_spec_to_grid.o\
@@ -535,7 +539,7 @@ outRot.o              : truncation.o blocking.o num_param.o\
 blocking.o            : truncation.o LMmapping.o logic.o parallel.o\
                         output_data.o useful.o precision_mod.o constants.o\
                         mem_alloc.o
-num_param.o           : truncation.o precision_mod.o mem_alloc.o
+num_param.o           : truncation.o precision_mod.o mem_alloc.o timing.o
 radial.o              : truncation.o radial_data.o $(LAPACK_OBJS)\
                         phys_param.o logic.o precision_mod.o finite_differences.o\
                         output_data.o cosine_transform_odd.o\
@@ -549,7 +553,7 @@ horizontal.o          : truncation.o phys_param.o num_param.o precision_mod.o\
 RMS.o	              : truncation.o blocking.o mem_alloc.o
 init_fields.o         : truncation.o blocking.o radial.o horizontal.o\
                         constants.o logic.o $(FFT_OBJS) legendre_grid_to_spec.o\
-                        useful.o phys_param.o LMLoop_data.o communications.o\
+                        useful.o phys_param.o LMLoop_data.o mpi_transpose.o\
                         cosine_transform_odd.o mem_alloc.o parallel.o
 movie.o               : truncation.o parallel.o radial_data.o\
                         output_data.o logic.o radial.o mem_alloc.o\
@@ -557,7 +561,7 @@ movie.o               : truncation.o parallel.o radial_data.o\
 dtB.o                 : truncation.o radial_data.o parallel.o \
                         LMLoop_data.o $(FFT_OBJS) radial.o logic.o\
                         blocking.o horizontal.o phys_param.o\
-                        communications.o legendre_grid_to_spec.o\
+                        mpi_transpose.o legendre_grid_to_spec.o\
                         radial_spectra.o radial_derivatives.o mem_alloc.o
 TO.o                  : truncation.o blocking.o horizontal.o\
                         radial_data.o phys_param.o radial.o logic.o\

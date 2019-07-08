@@ -12,11 +12,21 @@ module parallel_mod
 
    integer :: nThreads
    integer :: rank,n_procs
-   integer :: nR_per_rank,nR_on_last_rank
+   integer :: nR_per_rank
    integer :: nLMBs_per_rank
    integer :: rank_with_l1m0
    integer :: chunksize
    integer :: ierr
+
+
+   type, public :: load
+      integer :: nStart
+      integer :: nStop
+      integer :: n_per_rank
+      integer :: n_points
+   end type load
+
+   public :: getBlocks
 
 contains
 
@@ -63,5 +73,31 @@ contains
       endif
 
    end subroutine check_MPI_error
+!------------------------------------------------------------------------------
+   subroutine getBlocks(bal, n_points, n_procs)
+
+      type(load), intent(inout) :: bal(0:)
+      integer, intent(in) :: n_procs
+      integer, intent(in) :: n_points
+
+      integer :: n_points_loc, check, p
+
+      n_points_loc = n_points/n_procs
+
+      check = mod(n_points,n_procs)!-1
+
+      bal(0)%nStart = 1
+
+      do p =0, n_procs-1
+         if ( p /= 0 ) bal(p)%nStart=bal(p-1)%nStop+1
+         bal(p)%n_per_rank=n_points_loc
+         if ( p == n_procs-1 ) then
+            bal(p)%n_per_rank=n_points_loc+check
+         end if
+         bal(p)%nStop=bal(p)%nStart+bal(p)%n_per_rank-1
+         bal(p)%n_points=n_points
+      end do
+
+   end subroutine getBlocks
 !------------------------------------------------------------------------------
 end module parallel_mod

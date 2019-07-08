@@ -80,25 +80,29 @@ contains
       allocate( sinTheta(n_theta_max) )
       allocate( cosTheta(n_theta_max) )
       bytes_allocated = bytes_allocated+n_theta_max*SIZEOF_INTEGER+&
-                        8*n_theta_max*SIZEOF_DEF_REAL
+      &                 8*n_theta_max*SIZEOF_DEF_REAL
 
       !-- Phi (longitude)
       allocate( phi(n_phi_max) )
       bytes_allocated = bytes_allocated+n_phi_max*SIZEOF_DEF_REAL
 
       !-- Legendres:
+      allocate( gauss(n_theta_max) )
+      allocate( dPl0Eq(l_max+1) )
+      bytes_allocated = bytes_allocated+(n_theta_max+l_max+1)*SIZEOF_DEF_REAL
+
+#ifndef WITH_SHTNS
       allocate( Plm(lm_max,n_theta_max/2) )
       allocate( wPlm(lmP_max,n_theta_max/2) )
       allocate( dPlm(lm_max,n_theta_max/2) )
-      allocate( gauss(n_theta_max) )
-      allocate( dPl0Eq(l_max+1) )
       bytes_allocated = bytes_allocated+(lm_max*n_theta_max+ &
-                        lmP_max*n_theta_max/2+n_theta_max+l_max+1)*SIZEOF_DEF_REAL
+      &                 lmP_max*n_theta_max/2)*SIZEOF_DEF_REAL
 
       if ( l_RMS ) then
          allocate( wdPlm(lmP_max,n_theta_max/2) )
          bytes_allocated = bytes_allocated*lmP_max*n_theta_max/2*SIZEOF_DEF_REAL
       end if
+#endif
 
       !-- Arrays depending on l and m:
       allocate( dPhi(lm_max) )
@@ -126,8 +130,11 @@ contains
 
       deallocate( sinTheta, cosTheta, theta, theta_ord, n_theta_cal2ord )
       deallocate( sn2, osn2, cosn2, osn1, O_sin_theta, O_sin_theta_E2, phi )
-      deallocate( Plm, wPlm, dPlm, gauss, dPl0Eq )
+      deallocate( gauss, dPl0Eq )
+#ifndef WITH_SHTNS
+      deallocate( Plm, wPlm, dPlm )
       if ( l_RMS ) deallocate( wdPlm )
+#endif
       deallocate( dPhi, dPhi0, dLh, dTheta1S, dTheta1A )
       deallocate( dTheta2S, dTheta2A, dTheta3S, dTheta3A, dTheta4S, dTheta4A )
       deallocate( D_m, D_l, D_lP1, D_mc2m, hdif_B, hdif_V, hdif_S, hdif_Xi )
@@ -146,11 +153,14 @@ contains
 
       !-- Local variables:
       integer :: norm,n_theta,n_phi
-      integer :: l,m,lm,lmP,mc
+      integer :: l,m,lm,mc
       real(cp) :: ampnu!,q0
       real(cp) :: clm(0:l_max+1,0:l_max+1)
+#ifndef WITH_SHTNS
+      integer :: lmP
       real(cp) :: plma(lmP_max)
       real(cp) :: dtheta_plma(lmP_max)
+#endif
       real(cp) :: colat
       real(cp) :: fac
       real(cp) :: Pl0Eq(l_max+1)
@@ -171,11 +181,12 @@ contains
 
          colat=theta_ord(n_theta)
 
+#ifndef WITH_SHTNS
          !----- plmtheta calculates plms and their derivatives
          !      up to degree and order l_max+1 and m_max at
          !      the points cos(theta_ord(n_theta)):
          call plm_theta(colat,l_max+1,m_max,minc, &
-                        plma,dtheta_plma,lmP_max,norm)
+              &         plma,dtheta_plma,lmP_max,norm)
          do lmP=1,lmP_max
             l=lmP2l(lmP)
             if ( l <= l_max ) then
@@ -186,6 +197,7 @@ contains
             wPlm(lmP,n_theta) =two*pi*gauss(n_theta)*plma(lmP)
             if ( l_RMS ) wdPlm(lmP,n_theta)=two*pi*gauss(n_theta)*dtheta_plma(lmP)
          end do
+#endif
 
          ! Get dP for all degrees and order m=0 at the equator only
          ! Usefull to estimate the flow velocity at the equator
@@ -288,25 +300,25 @@ contains
 
             !-- Old type:
                hdif_B(lm)= one + difeta * ( real(l+1-ldif,cp) / &
-                                             real(l_max+1-ldif,cp) )**ldifexp
+               &                             real(l_max+1-ldif,cp) )**ldifexp
                hdif_V(lm)= one + difnu * ( real(l+1-ldif,cp) / &
-                                            real(l_max+1-ldif,cp) )**ldifexp
+               &                            real(l_max+1-ldif,cp) )**ldifexp
                hdif_S(lm)= one + difkap * ( real(l+1-ldif,cp) / &
-                                             real(l_max+1-ldif,cp) )**ldifexp
+               &                             real(l_max+1-ldif,cp) )**ldifexp
                hdif_Xi(lm)= one + difchem * ( real(l+1-ldif,cp) / &
-                                             real(l_max+1-ldif,cp) )**ldifexp
+               &                             real(l_max+1-ldif,cp) )**ldifexp
 
              else if ( ldif < 0 ) then
 
              !-- Grote and Busse type:
                 hdif_B(lm)= (one+difeta*real(l,cp)**ldifexp ) / &
-                            (one+difeta*real(-ldif,cp)**ldifexp )
+                &           (one+difeta*real(-ldif,cp)**ldifexp )
                 hdif_V(lm)= (one+difnu*real(l,cp)**ldifexp ) / &
-                            (one+difnu*real(-ldif,cp)**ldifexp )
+                &           (one+difnu*real(-ldif,cp)**ldifexp )
                 hdif_S(lm)= (one+difkap*real(l,cp)**ldifexp ) / &
-                            (one+difkap*real(-ldif,cp)**ldifexp )
+                &           (one+difkap*real(-ldif,cp)**ldifexp )
                 hdif_Xi(lm)=(one+difchem*real(l,cp)**ldifexp ) / &
-                            (one+difchem*real(-ldif,cp)**ldifexp )
+                &           (one+difchem*real(-ldif,cp)**ldifexp )
 
              end if
 
@@ -357,22 +369,6 @@ contains
             lmOddP(mc)=.true.
          end if
       end do
-
-#if 0
-      write(*,"(A,I6,A,I10,A,I10,A)")                                           &
-           & "cache info of first element, all have dimension 1:lm_max=",lm_max,&
-           & " = ",lm_max*16,"B (C), ",lm_max*8,"B (R)"
-      call print_cache_info_dcmplx("C: dPhi0"//C_NULL_CHAR,dPhi0(1))
-      call print_cache_info_dcmplx("C: dPhi"//C_NULL_CHAR,dPhi(1))
-      call print_cache_info_dreal("R: dTheta1A"//C_NULL_CHAR,dTheta1A(1))
-      call print_cache_info_dreal("R: dTheta1S"//C_NULL_CHAR,dTheta1S(1))
-      call print_cache_info_dreal("R: dTheta2A"//C_NULL_CHAR,dTheta2A(1))
-      call print_cache_info_dreal("R: dTheta2S"//C_NULL_CHAR,dTheta2S(1))
-      call print_cache_info_dreal("R: dTheta3A"//C_NULL_CHAR,dTheta3A(1))
-      call print_cache_info_dreal("R: dTheta3S"//C_NULL_CHAR,dTheta3S(1))
-      call print_cache_info_dreal("R: dTheta4A"//C_NULL_CHAR,dTheta4A(1))
-      call print_cache_info_dreal("R: dTheta4S"//C_NULL_CHAR,dTheta4S(1))
-#endif
 
    end subroutine horizontal
 !------------------------------------------------------------------------------

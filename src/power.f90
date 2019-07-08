@@ -3,6 +3,7 @@ module power
    use parallel_mod
    use precision_mod
    use mem_alloc, only: bytes_allocated
+   use communications, only: gather_from_Rloc, reduce_radial
    use truncation, only: n_r_ic_maxMag, n_r_max, n_r_ic_max, l_max, &
        &                 n_r_maxMag
    use radial_data, only: n_r_icb, n_r_cmb, nRstart, nRstop
@@ -25,7 +26,11 @@ module power
    use integration, only: rInt_R, rIntIC
    use outRot, only: get_viscous_torque
    use constants, only: one, two, half
+#ifdef WITH_SHTNS
+   use shtns, only: axi_to_spat
+#else
    use legendre_spec_to_grid, only: lmAS2pt
+#endif
 
    implicit none
 
@@ -47,7 +52,7 @@ module power
    public :: initialize_output_power, get_power, finalize_output_power
 
 contains
-  
+
    subroutine initialize_output_power
       !
       ! Memory allocation
@@ -160,16 +165,20 @@ contains
       logical :: rank_has_l1m0
       integer :: sr_tag, fileHandle
 #ifdef WITH_MPI
-      integer :: i,sendcount,recvcounts(0:n_procs-1),displs(0:n_procs-1)
       integer :: status(MPI_STATUS_SIZE)
 #endif
 
       do n_r=nRstart,nRstop
          viscHeatR(n_r)=0.0_cp
+#ifdef WITH_SHTNS
+         call axi_to_spat(viscLMr(:,n_r), visc)
+#endif
          do n=1,nThetaBs ! Loop over theta blocks
             nTheta=(n-1)*sizeThetaB
             nThetaStart=nTheta+1
+#ifndef WITH_SHTNS
             call lmAS2pt(viscLMr(:,n_r),visc,nThetaStart,sizeThetaB)
+#endif
             do nThetaBlock=1,sizeThetaB
                nTheta=nTheta+1
                nThetaNHS=(nTheta+1)/2
@@ -243,42 +252,10 @@ contains
 
       end do    ! radial grid points
 
-#ifdef WITH_MPI
-      if ( l_mag ) then
-         call MPI_Reduce(curlB2_r,curlB2_r_global,n_r_max,MPI_DEF_REAL, &
-              &          MPI_SUM,0,MPI_COMM_WORLD,ierr)
-      end if
-      if ( l_heat ) then
-         call MPI_Reduce(buoy_r,buoy_r_global,n_r_max,MPI_DEF_REAL,MPI_SUM, &
-              &          0,MPI_COMM_WORLD,ierr)
-      end if
-      if ( l_chemical_conv ) then
-         call MPI_Reduce(buoy_chem_r,buoy_chem_r_global,n_r_max,MPI_DEF_REAL,&
-              &          MPI_SUM,0,MPI_COMM_WORLD, ierr)
-      end if
-      !if ( l_conv ) call MPI_Reduce(curlU2_r,curlU2_r_global,n_r_max,&
-      !     & MPI_DEF_REAL,MPI_SUM,0,MPI_COMM_WORLD,ierr)
-
-      if ( l_conv ) then
-         sendcount  = (nRstop-nRstart+1)
-         recvcounts = nR_per_rank
-         recvcounts(n_procs-1) = nR_on_last_rank
-         do i=0,n_procs-1
-            displs(i) = i*nR_per_rank
-         end do
-         call MPI_GatherV(viscHeatR, sendcount, MPI_DEF_REAL,                &
-              &           viscHeatR_global, recvcounts,displs, MPI_DEF_REAL, &
-              &           0, MPI_COMM_WORLD, ierr)
-      end if
-
-#else
-      !if ( l_conv ) curlU2_r_global=curlU2_r
-      if ( l_mag )  curlB2_r_global(:)=curlB2_r(:)
-      if ( l_heat ) buoy_r_global(:)=buoy_r(:)
-      if ( l_chemical_conv ) buoy_chem_r_global(:) = buoy_chem_r(:)
-
-      if ( l_conv ) viscHeatR_global(:)=viscHeatR(:)
-#endif
+      if ( l_mag ) call reduce_radial(curlB2_r, curlB2_r_global, 0)
+      if ( l_heat ) call reduce_radial(buoy_r, buoy_r_global, 0)
+      if ( l_chemical_conv ) call reduce_radial(buoy_chem_r, buoy_chem_r_global, 0)
+      if ( l_conv ) call gather_from_Rloc(viscHeatR, viscHeatR_global, 0)
 
       if ( rank == 0 ) then
          n_calls = n_calls+1
@@ -335,12 +312,7 @@ contains
             end do
          end do    ! radial grid points
 
-#ifdef WITH_MPI
-         call MPI_Reduce(curlB2_rIC, curlB2_rIC_global, n_r_ic_max, &
-              &          MPI_DEF_REAL, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
-#else
-         curlB2_rIC_global(:)=curlB2_rIC(:)
-#endif
+         call reduce_radial(curlB2_rIC, curlB2_rIC_global, 0)
 
          if ( rank == 0 ) then
             curlB2_IC=rIntIC(curlB2_rIC_global,n_r_ic_max,dr_fac_ic,chebt_ic)
@@ -455,7 +427,7 @@ contains
             powerMA=0.0_cp
          end if
 
-         !--- Because the two systems are coupled only the total 
+         !--- Because the two systems are coupled only the total
          !--- ohmic dissipation is useful:
          ohmDiss=-curlB2-curlB2_IC
 
@@ -482,7 +454,7 @@ contains
             ! buoMeanR(:)=buoMeanR(:)/timeNorm
             buoR_mean(1)      =0.0_cp ! Ensure this is really zero on the boundaries
             buoR_mean(n_r_max)=0.0_cp
-            buoR_SD(1)        =0.0_cp 
+            buoR_SD(1)        =0.0_cp
             buoR_SD(n_r_max)  =0.0_cp
             if ( l_chemical_conv ) then
                buo_chemR_mean(1)      =0.0_cp
@@ -490,7 +462,7 @@ contains
                buo_chemR_SD(1)        =0.0_cp
                buo_chemR_SD(n_r_max)  =0.0_cp
             end if
-            
+
             buoR_SD(:)     =sqrt(buoR_SD(:)/timeNorm)
             ohmDissR_SD(:) =sqrt(ohmDissR_SD(:)/timeNorm)
             viscHeatR_SD(:)=sqrt(viscHeatR_SD(:)/timeNorm)
@@ -505,7 +477,7 @@ contains
                &     round_off(buoR_SD(n_r),buoR_mean(n_r)),           &
                &     round_off(buo_chemR_SD(n_r),buo_chemR_mean(n_r)), &
                &     round_off(viscHeatR_SD(n_r),viscHeatR_mean(n_r)), &
-               &     round_off(ohmDissR_SD(n_r),ohmDissR_mean(n_r))   
+               &     round_off(ohmDissR_SD(n_r),ohmDissR_mean(n_r))
             end do
             close(fileHandle)
          end if

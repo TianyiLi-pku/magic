@@ -89,14 +89,17 @@ program magic
    use truncation
    use precision_mod
    use physical_parameters
+   use iso_fortran_env, only: output_unit
    use radial_der, only: initialize_der_arrays, finalize_der_arrays
-   use radial_functions, only: initialize_radial_functions, finalize_radial_functions
+   use radial_functions, only: initialize_radial_functions, &
+       &                       finalize_radial_functions
    use num_param
    use torsional_oscillations
    use init_fields
    use special, only: initialize_Grenoble, finalize_Grenoble
    use blocking, only: initialize_blocking, finalize_blocking
    use LMLoop_data, only: llm, ulm
+   use timing, only: timer_type
    use horizontal_data
    use logic
    use fields
@@ -105,7 +108,7 @@ program magic
    use movie_data, only: initialize_movie_data, finalize_movie_data
    use RMS, only: initialize_RMS, finalize_RMS
    use dtB_mod, only: initialize_dtB_mod, finalize_dtB_mod
-   use radial_data, only: initialize_radial_data
+   use radial_data, only: initialize_radial_data, finalize_radial_data
    use radialLoop, only: initialize_radialLoop, finalize_radialLoop
    use lmLoop_data, only: initialize_LMLoop_data
    use LMLoop_mod,only: initialize_LMLoop, finalize_LMLoop
@@ -122,7 +125,6 @@ program magic
    use parallel_mod
    use Namelists
    use step_time_mod, only: initialize_step_time, step_time, finalize_step_time
-   use timing, only: writeTime,wallTime
    use communications, only:initialize_communications, finalize_communications
    use power, only: initialize_output_power, finalize_output_power
    use outPar_mod, only: initialize_outPar_mod, finalize_outPar_mod
@@ -153,6 +155,7 @@ program magic
    real(cp) :: time
    real(cp) :: dt
    real(cp) :: dtNew
+   type(timer_type) :: run_time, run_time_start
 
    integer :: n_stop_signal=0     ! signal returned from step_time
 
@@ -165,8 +168,8 @@ program magic
 
 #ifdef WITH_MPI
 #ifdef WITHOMP
-   required_level=MPI_THREAD_MULTIPLE
-   call mpi_init_thread(required_level,provided_level,ierr)
+   required_level=MPI_THREAD_FUNNELED
+   call MPI_Init_Thread(required_level,provided_level,ierr)
    if (provided_level < required_level) then
       print*,"We need at least thread level ",required_level, &
       &      ", but have ",provided_level
@@ -187,16 +190,19 @@ program magic
    !LIKWID_ON('main')
    call parallel
 
+   call run_time%initialize()
+   call run_time%start_count()
+   call run_time_start%initialize()
+   call run_time_start%start_count()
+
    !--- Read starting time
    if ( rank == 0 ) then
-      !call get_resetTime(resetTime)
-      call wallTime(runTimeStart)
       write(*,*)
       write(*,*) '!--- Program MagIC ', trim(codeVersion), ' ---!'
       call date_and_time(values=values)
       write(date, '(i4,''/'',i0.2,''/'',i0.2,'' '', i0.2,'':'',i0.2,'':'',i0.2)') &
       &     values(1), values(2), values(3), values(5), values(6), values(7)
-      write(6, *) '!  Start time:  ', date
+      write(output_unit, *) '!  Start time:  ', date
    end if
 
    !--- Read input parameters:
@@ -212,12 +218,12 @@ program magic
    if ( rank == 0 ) then
       open(newunit=n_log_file, file=log_file, status='new')
 
-      write(n_log_file,*) '!      __  __             _____ _____   _____   __       '
-      write(n_log_file,*) '!     |  \/  |           |_   _/ ____| | ____| / /       '
-      write(n_log_file,*) '!     | \  / | __ _  __ _  | || |      | |__  / /_       '
-      write(n_log_file,*) '!     | |\/| |/ _` |/ _` | | || |      |___ \| "_ \      '
-      write(n_log_file,*) '!     | |  | | (_| | (_| |_| || |____   ___) | (_) |     '
-      write(n_log_file,*) '!     |_|  |_|\__,_|\__, |_____\_____| |____(_)___/      '
+      write(n_log_file,*) '!      __  __             _____ _____   _____ ______     '
+      write(n_log_file,*) '!     |  \/  |           |_   _/ ____| | ____|____  |    '
+      write(n_log_file,*) '!     | \  / | __ _  __ _  | || |      | |__     / /     '
+      write(n_log_file,*) '!     | |\/| |/ _` |/ _` | | || |      |___ \   / /      '
+      write(n_log_file,*) '!     | |  | | (_| | (_| |_| || |____   ___) | / /       '
+      write(n_log_file,*) '!     |_|  |_|\__,_|\__, |_____\_____| |____(_)_/        '
       write(n_log_file,*) '!                    __/ |                               '
       write(n_log_file,*) '!                   |___/                                '
       write(n_log_file,*) '!                                                        '
@@ -318,7 +324,7 @@ program magic
          open(newunit=n_log_file, file=log_file, status='unknown', &
          &    position='append')
       end if
-      call writeNamelists(6)
+      call writeNamelists(output_unit)
       call writeNamelists(n_log_file)
       if ( l_save_out ) close(n_log_file)
    end if
@@ -335,7 +341,7 @@ program magic
          open(newunit=n_log_file, file=log_file, status='unknown', &
          &    position='append')
       end if
-      call writeInfo(6)
+      call writeInfo(output_unit)
       call writeInfo(n_log_file)
       if ( l_save_out ) close(n_log_file)
    end if
@@ -362,10 +368,16 @@ program magic
    timeStart        =time
    n_time_step_start=n_time_step
 
+   !-- Stop measuring initiatisation of MagIC
+   call run_time_start%stop_count()
+
    !--- Call time-integration routine:
-   PERFON('steptime')
-   call step_time(time,dt,dtNew,n_time_step)
-   PERFOFF
+   call step_time(time,dt,dtNew,n_time_step,run_time_start)
+
+   !-- Stop counting time and print
+   call run_time%stop_count()
+   call run_time%finalize('! Total run time:', n_log_file)
+
    !--- Write stop time to SDTOUR and logfile:
    if ( rank == 0 ) then
       if ( l_save_out ) then
@@ -374,7 +386,7 @@ program magic
       end if
 
       do n=1,2
-         if ( n == 1 ) nO=6
+         if ( n == 1 ) nO=output_unit
          if ( n == 2 ) nO=n_log_file
          write(nO,'(/,'' ! STOPPING TIME INTEGRATION AT:'')')
          write(nO,'(''   stop time ='',1p,ES18.10)') tScale*time
@@ -382,17 +394,13 @@ program magic
          write(nO,'(''   steps gone='',i10)') (n_time_step-1)
          write(nO,*)
          if ( n_stop_signal > 0 ) then
-            write(nO,*) '!!! MAGIC terminated by STOP signal !!!'
+            write(nO,*) '!!! MagIC terminated by STOP signal !!!'
          else
-            write(nO,*) '!!! regular end of program MAGIC !!!'
+            write(nO,*) '!!! regular end of program MagIC !!!'
          end if
          write(nO,*)
-         !write(nO,'('' max. thread number in  R-loop='',i3)') &
-         !      nThreadsRmax
-         !write(nO,'('' max. thread number in LM-loop='',i3)') &
-         !      nThreadsLMmax
+
          write(nO,*)
-         call writeTime(nO,'! Total run time:',runTime)
          write(nO,*)
          write(nO,*) ' !***********************************!'
          write(nO,*) ' !---- THANK YOU FOR USING MAGIC ----!'
@@ -440,11 +448,12 @@ program magic
    call finalize_horizontal_data
    call finalize_radial_functions
    call finalize_blocking
+   call finalize_radial_data
 
    call finalize_output
 
    if ( rank == 0 .and. (.not. l_save_out) )  close(n_log_file)
-   
+
    PERFOFF
    PERFOUT('main')
    !LIKWID_OFF('main')

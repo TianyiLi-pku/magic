@@ -1,6 +1,6 @@
 #include "perflib_preproc.cpp"
 module updateWPS_mod
-   
+
    use omp_lib
    use precision_mod
    use mem_alloc, only: bytes_allocated
@@ -13,7 +13,7 @@ module updateWPS_mod
    use physical_parameters, only: kbotv, ktopv, ktops, kbots, ra, opr, &
        &                          ViscHeatFac, ThExpNb, BuoFac,        &
        &                          CorFac, ktopp
-   use num_param, only: alpha
+   use num_param, only: alpha, dct_counter, solve_counter
    use init_fields, only: tops, bots
    use blocking, only: nLMBs,lo_sub_map,lo_map,st_map,st_sub_map, &
        &               lmStartB,lmStopB
@@ -54,16 +54,21 @@ contains
 
    subroutine initialize_updateWPS
 
+      integer, pointer :: nLMBs2(:)
+
+      nLMBs2(1:nLMBs) => lo_sub_map%nLMBs2
+
       allocate( ps0Mat(2*n_r_max,2*n_r_max) )
       allocate( ps0Mat_fac(2*n_r_max,2) )
       allocate( ps0Pivot(2*n_r_max) )
       bytes_allocated = bytes_allocated+(4*n_r_max+2)*n_r_max*SIZEOF_DEF_REAL &
       &                 +2*n_r_max*SIZEOF_INTEGER
-      allocate( wpsMat(3*n_r_max,3*n_r_max,l_max) )
-      allocate(wpsMat_fac(3*n_r_max,2,l_max))
-      allocate ( wpsPivot(3*n_r_max,l_max) )
-      bytes_allocated = bytes_allocated+(9*n_r_max*l_max+6*n_r_max*l_max)*&
-      &                 SIZEOF_DEF_REAL+3*n_r_max*l_max*SIZEOF_INTEGER
+      allocate( wpsMat(3*n_r_max,3*n_r_max,nLMBs2(1+rank)) )
+      allocate(wpsMat_fac(3*n_r_max,2,nLMBs2(1+rank)))
+      allocate ( wpsPivot(3*n_r_max,nLMBs2(1+rank)) )
+      bytes_allocated = bytes_allocated+(9*n_r_max*nLMBs2(1+rank)+6*n_r_max* &
+      &                 nLMBs2(1+rank))*SIZEOF_DEF_REAL+3*n_r_max*           &
+      &                 nLMBs2(1+rank)*SIZEOF_INTEGER
       allocate( lWPSmat(0:l_max) )
       bytes_allocated = bytes_allocated+(l_max+1)*SIZEOF_LOGICAL
 
@@ -168,10 +173,8 @@ contains
       lm2l(1:lm_max) => lo_map%lm2l
       lm2m(1:lm_max) => lo_map%lm2m
 
-      !allocate(rhs1(2*n_r_max,lo_sub_map%sizeLMB2max,nLMBs2(nLMB)))
-
-      lmStart     =lmStartB(nLMB)
-      lmStop      =lmStopB(nLMB)
+      lmStart=lmStartB(nLMB)
+      lmStop =lmStopB(nLMB)
 
       w2  =one-w1
       O_dt=one/dt
@@ -214,6 +217,7 @@ contains
       !$OMP END PARALLEL
 
 
+      call solve_counter%start_count()
       !PERFON('upWP_ssol')
       !$OMP PARALLEL default(shared)
       !$OMP SINGLE
@@ -239,10 +243,10 @@ contains
             end if
          else
             if ( .not. lWPSmat(l1) ) then
-               call get_wpsMat(dt,l1,hdif_V(st_map%lm2(l1,0)), &
-                    &          hdif_S(st_map%lm2(l1,0)),       &
-                    &          wpsMat(:,:,l1),wpsPivot(:,l1),  &
-                    &          wpsMat_fac(:,:,l1))
+               call get_wpsMat(dt,l1,hdif_V(st_map%lm2(l1,0)),       &
+                    &          hdif_S(st_map%lm2(l1,0)),             &
+                    &          wpsMat(:,:,nLMB2),wpsPivot(:,nLMB2),  &
+                    &          wpsMat_fac(:,:,nLMB2))
                lWPSmat(l1)=.true.
             end if
          end if
@@ -324,16 +328,16 @@ contains
                ! use the mat_fac(:,1) to scale the rhs
                do lm=lmB0+1,lmB
                   do nR=1,3*n_r_max
-                     rhs1(nR,lm,threadid)=rhs1(nR,lm,threadid)*wpsMat_fac(nR,1,l1)
+                     rhs1(nR,lm,threadid)=rhs1(nR,lm,threadid)*wpsMat_fac(nR,1,nLMB2)
                   end do
                end do
-               call solve_mat(wpsMat(:,:,l1),3*n_r_max,3*n_r_max,        &
-                    &         wpsPivot(:,l1),rhs1(:,lmB0+1:lmB,threadid),&
+               call solve_mat(wpsMat(:,:,nLMB2),3*n_r_max,3*n_r_max,        &
+                    &         wpsPivot(:,nLMB2),rhs1(:,lmB0+1:lmB,threadid),&
                     &         lmB-lmB0)
                ! rescale the solution with mat_fac(:,2)
                do lm=lmB0+1,lmB
                   do nR=1,3*n_r_max
-                     rhs1(nR,lm,threadid)=rhs1(nR,lm,threadid)*wpsMat_fac(nR,2,l1)
+                     rhs1(nR,lm,threadid)=rhs1(nR,lm,threadid)*wpsMat_fac(nR,2,nLMB2)
                   end do
                end do
             end if
@@ -387,7 +391,7 @@ contains
       !$OMP END SINGLE
       !$OMP END PARALLEL
       !PERFOFF
-      !write(*,"(A,I3,4ES22.12)") "w,p after: ",nLMB,get_global_SUM(w),get_global_SUM(p)
+      call solve_counter%stop_count(l_increment=.false.)
 
       !-- set cheb modes > rscheme_oc%n_max to zero (dealiazing)
       do n_r_out=rscheme_oc%n_max+1,n_r_max
@@ -399,6 +403,7 @@ contains
       end do
 
 
+      call dct_counter%start_count()
       !PERFON('upWP_drv')
       all_lms=lmStop-lmStart+1
 #ifdef WITHOMP
@@ -443,6 +448,7 @@ contains
       end do
       !$OMP end do
       !$OMP END PARALLEL
+      call dct_counter%stop_count(l_increment=.false.)
 
 
       !do nR=1,n_r_max
@@ -466,6 +472,7 @@ contains
 
       !-- Calculate explicit time step part:
       if ( l_temperature_diff ) then
+         !$omp parallel do default(shared) private(nR,lm1,l1,m1,Dif,Pre,Buo,dtV)
          do nR=n_r_top,n_r_bot
             do lm1=lmStart,lmStop
                l1=lm2l(lm1)
@@ -531,9 +538,11 @@ contains
                     &        dtVPolLMr(llm:,nR),dtVPol2hInt(:,nR,1),lo_map)
             end if
          end do
+         !$omp end parallel do
 
       else ! entropy diffusion
 
+         !$omp parallel do default(shared) private(nR,lm1,l1,m1,Dif,Pre,Buo,dtV)
          do nR=n_r_top,n_r_bot
             do lm1=lmStart,lmStop
                l1=lm2l(lm1)
@@ -591,14 +600,15 @@ contains
                     &        dtVPolLMr(llm:,nR),dtVPol2hInt(:,nR,1),lo_map)
             end if
          end do
+         !$omp end parallel do
       end if
 
    end subroutine updateWPS
    !------------------------------------------------------------------------------
    subroutine get_wpsMat(dt,l,hdif_vel,hdif_s,wpsMat,wpsPivot,wpsMat_fac)
       !
-      !  Purpose of this subroutine is to contruct the time step matrix  
-      !  wpmat  for the NS equation.                                    
+      !  Purpose of this subroutine is to contruct the time step matrix
+      !  wpmat  for the NS equation.
       !
 
       !-- Input variables:
@@ -619,21 +629,21 @@ contains
 
       O_dt=one/dt
       dLh =real(l*(l+1),kind=cp)
-    
+
       !-- Now mode l>0
-    
+
       !----- Boundary conditions, see above:
       do nR_out=1,rscheme_oc%n_max
          nR_out_p=nR_out+n_r_max
          nR_out_s=nR_out+2*n_r_max
-    
+
          wpsMat(1,nR_out)        =rscheme_oc%rnorm*rscheme_oc%rMat(1,nR_out)
          wpsMat(1,nR_out_p)      =0.0_cp
          wpsMat(1,nR_out_s)      =0.0_cp
          wpsMat(n_r_max,nR_out)  =rscheme_oc%rnorm*rscheme_oc%rMat(n_r_max,nR_out)
          wpsMat(n_r_max,nR_out_p)=0.0_cp
          wpsMat(n_r_max,nR_out_s)=0.0_cp
-    
+
          if ( ktopv == 1 ) then  ! free slip !
             wpsMat(n_r_max+1,nR_out)=rscheme_oc%rnorm * (          &
             &                        rscheme_oc%d2rMat(1,nR_out) - &
@@ -705,9 +715,9 @@ contains
          end if
          wpsMat(3*n_r_max,nR_out)  =0.0_cp
 
-    
+
       end do   !  loop over nR_out
-    
+
       if ( rscheme_oc%n_max < n_r_max ) then ! fill with zeros !
          do nR_out=rscheme_oc%n_max+1,n_r_max
             nR_out_p=nR_out+n_r_max
@@ -732,7 +742,7 @@ contains
             wpsMat(3*n_r_max,nR_out_s)  =0.0_cp
          end do
       end if
-    
+
       if ( l_temperature_diff ) then ! temperature diffusion
 
          do nR_out=1,n_r_max
@@ -755,7 +765,7 @@ contains
                ! Buoyancy
                wpsMat(nR,nR_out_s)=-rscheme_oc%rnorm*alpha*BuoFac*rgrav(nR)* &
                &                    rho0(nR)*rscheme_oc%rMat(nR,nR_out)
-       
+
                ! Pressure gradient
                wpsMat(nR,nR_out_p)= rscheme_oc%rnorm*alpha*(              &
                &                              rscheme_oc%drMat(nR,nR_out) &
@@ -772,7 +782,7 @@ contains
                &                                   rscheme_oc%drMat(nR,nR_out) &
                &        -dLh*or2(nR)*( two*or1(nR)+dLvisc(nR)                  &
                &           +two*third*beta(nR)   )* rscheme_oc%rMat(nR,nR_out) ) )
-       
+
                wpsMat(nR_p,nR_out_p)= -rscheme_oc%rnorm*alpha*dLh*or2(nR)* &
                &                       rscheme_oc%rMat(nR,nR_out)
 
@@ -785,7 +795,7 @@ contains
                &      ( beta(nR)+two*dLtemp0(nR)+                                 &
                &        two*or1(nR)+dLkappa(nR) )* rscheme_oc%drMat(nR,nR_out) +  &
                &      ( ddLtemp0(nR)+dLtemp0(nR)*(                                &
-               &  two*or1(nR)+dLkappa(nR)+dLtemp0(nR)+beta(nR) )   -              &   
+               &  two*or1(nR)+dLkappa(nR)+dLtemp0(nR)+beta(nR) )   -              &
                &           dLh*or2(nR) )*           rscheme_oc%rMat(nR,nR_out) ) )
 
                wpsMat(nR_s,nR_out_p)= -alpha*rscheme_oc%rnorm*hdif_s*kappa(nR)*   &
@@ -828,7 +838,7 @@ contains
                ! Buoyancy
                wpsMat(nR,nR_out_s)=-rscheme_oc%rnorm*alpha*BuoFac*rgrav(nR)* &
                &                    rho0(nR)*rscheme_oc%rMat(nR,nR_out)
-       
+
                ! Pressure gradient
                wpsMat(nR,nR_out_p)= rscheme_oc%rnorm*alpha*(                &
                &                                rscheme_oc%drMat(nR,nR_out) &
@@ -845,7 +855,7 @@ contains
                &                                    rscheme_oc%drMat(nR,nR_out)  &
                &          -dLh*or2(nR)*( two*or1(nR)+dLvisc(nR)                  &
                &            +two*third*beta(nR)   )* rscheme_oc%rMat(nR,nR_out)  ) )
-       
+
                wpsMat(nR_p,nR_out_p)= -rscheme_oc%rnorm*alpha*dLh*or2(nR)* &
                &                       rscheme_oc%rMat(nR,nR_out)
 
@@ -868,7 +878,7 @@ contains
             end do
          end do
       end if
-    
+
       !----- Factor for highest and lowest cheb:
       do nR=1,n_r_max
          nR_p=nR+n_r_max
@@ -892,7 +902,7 @@ contains
          wpsMat(nR_s,2*n_r_max+1)=rscheme_oc%boundary_fac*wpsMat(nR_s,2*n_r_max+1)
          wpsMat(nR_s,3*n_r_max)  =rscheme_oc%boundary_fac*wpsMat(nR_s,3*n_r_max)
       end do
-    
+
       ! compute the linesum of each line
       do nR=1,3*n_r_max
          wpsMat_fac(nR,1)=one/maxval(abs(wpsMat(nR,:)))
@@ -901,7 +911,7 @@ contains
       do nr=1,3*n_r_max
          wpsMat(nR,:) = wpsMat(nR,:)*wpsMat_fac(nR,1)
       end do
-    
+
       ! also compute the rowsum of each column
       do nR=1,3*n_r_max
          wpsMat_fac(nR,2)=one/maxval(abs(wpsMat(:,nR)))
@@ -948,7 +958,7 @@ contains
                &      ( beta(nR)+two*dLtemp0(nR)+                                  &
                &       two*or1(nR)+dLkappa(nR) )* rscheme_oc%drMat(nR,nR_out) +    &
                &      ( ddLtemp0(nR)+dLtemp0(nR)*(                                 &
-               &  two*or1(nR)+dLkappa(nR)+dLtemp0(nR)+beta(nR) ) ) *               &   
+               &  two*or1(nR)+dLkappa(nR)+dLtemp0(nR)+beta(nR) ) ) *               &
                &                                   rscheme_oc%rMat(nR,nR_out) ) )
 
                psMat(nR,nR_out_p)= -alpha*rscheme_oc%rnorm*kappa(nR)*opr*       &

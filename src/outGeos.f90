@@ -3,7 +3,7 @@ module geos_mod
    ! This module is used to calculate the outputs when either l_par
    ! or l_PV are set to .true.
    !
- 
+
    use precision_mod
    use parallel_mod
    use mem_alloc, only: bytes_allocated
@@ -25,10 +25,10 @@ module geos_mod
    use cosine_transform_odd, only: costf_odd_t
    use chebInt_mod
 
-   implicit none 
- 
+   implicit none
+
    private
- 
+
    real(cp) :: timeOld
    real(cp), allocatable :: PlmS(:,:,:), PlmZ(:,:,:), PlmSPV(:,:,:)
    real(cp), allocatable :: dPlmS(:,:,:), dPlmZ(:,:,:), dPlmSPV(:,:,:)
@@ -43,10 +43,11 @@ module geos_mod
    real(cp), allocatable :: VorOld(:,:,:)
    real(cp), parameter :: eps = 10.0_cp*epsilon(one)
 
-   integer :: n_geos_file
-   integer :: nSmax, nZmaxA, nSstart, nSstop, nS_per_rank, nS_on_last_rank
+   integer :: n_geos_file, nrp_geos
+   integer :: nSmax, nZmaxA, nSstart, nSstop
+   type(load), allocatable :: cyl_balance(:)
    character(len=72) :: geos_file
- 
+
    public :: initialize_geos_mod, getEgeos, finalize_geos_mod, outPV
 
 contains
@@ -58,32 +59,32 @@ contains
       logical, intent(in) :: l_geos
       logical, intent(in) :: l_PV
 
-      integer :: nS_remaining
+#ifdef WITH_SHTNS
+      nrp_geos=nrp+2 ! One has to include the 2 extra points again
+#else
+      nrp_geos=nrp
+#endif
 
-      nSmax=n_r_max+int(r_ICB*real(n_r_max,cp)) 
+      nSmax=n_r_max+int(r_ICB*real(n_r_max,cp))
       nSmax=int(sDens*nSmax)
 
       nZmaxA=2*nSmax
 
       !-- Distribute over the ranks
-      nS_per_rank = nSmax/n_procs
-      nSstart = 1+rank*nS_per_rank
-      nSstop = 1+(rank+1)*nS_per_rank-1
-      nS_remaining = nSmax-(1+n_procs*nS_per_rank-1)
-      if ( rank == n_procs-1 ) then
-         nSstop = nSstop+nS_remaining
-      end if
-      nS_on_last_rank = nS_per_rank + nS_remaining
+      allocate(cyl_balance(0:n_procs-1))
+      call getBlocks(cyl_balance, nSmax, n_procs)
+      nSstart = cyl_balance(rank)%nStart
+      nSstop = cyl_balance(rank)%nStop
 
       !-- The following global arrays are required in getDVptr
       allocate( wS_global(lm_max,n_r_max), dwS_global(lm_max,n_r_max) )
       allocate( ddwS_global(lm_max,n_r_max), zS_global(lm_max,n_r_max) )
-      allocate( dzS_global(lm_max,n_r_max) ) 
+      allocate( dzS_global(lm_max,n_r_max) )
       bytes_allocated = bytes_allocated+ 5*lm_max*n_r_max*SIZEOF_DEF_COMPLEX
 
       if ( l_PV ) then
          allocate( OsinTSPV(nZmaxA/2+1,nSstart:nSstop) )
-         allocate( PlmSPV(lm_max,nZmaxA/2+1,nSstart:nSstop) ) 
+         allocate( PlmSPV(lm_max,nZmaxA/2+1,nSstart:nSstop) )
          allocate( dPlmSPV(lm_max,nZmaxA/2+1,nSstart:nSstop) )
          allocate( rZPV(nZmaxA,nSstart:nSstop) )
          bytes_allocated = bytes_allocated+ ((nZmaxA/2+1)*(nSstop-nSstart+1)* &
@@ -93,8 +94,8 @@ contains
          allocate( dPlmZ(l_max+1,nZmaxA/2+1,nSstart:nSstop) )
          bytes_allocated = bytes_allocated + 2*(l_max+1)*(nZmaxA/2+1)* &
          &                 (nSstop-nSstart+1)*SIZEOF_DEF_REAL
-         allocate( VorOld(nrp,nZmaxA,nSstart:nSstop) )
-         bytes_allocated = bytes_allocated + nrp*nZmaxA*(nSstop-nSstart+1)* &
+         allocate( VorOld(nrp_geos,nZmaxA,nSstart:nSstop) )
+         bytes_allocated = bytes_allocated + nrp_geos*nZmaxA*(nSstop-nSstart+1)* &
          &                 SIZEOF_DEF_REAL
 
          allocate( nZC_Sloc(nSstart:nSstop),nZ2(nZmaxA,nSstart:nSstop) )
@@ -110,7 +111,7 @@ contains
 
       if ( l_geos ) then
          allocate( OsinTS(nZmaxA/2+1,nSstart:nSstop) )
-         allocate( PlmS(lm_max,nZmaxA/2+1,nSstart:nSstop) ) 
+         allocate( PlmS(lm_max,nZmaxA/2+1,nSstart:nSstop) )
          allocate( dPlmS(lm_max,nZmaxA/2+1,nSstart:nSstop) )
          allocate( zZ(nZmaxA,nSstart:nSstop) )
          allocate( rZ(nZmaxA,nSstart:nSstop) )
@@ -150,6 +151,8 @@ contains
          deallocate( OsinTSPV, PlmSPV, dPlmSPV, rZPV )
       end if
 
+      deallocate( cyl_balance )
+
    end subroutine finalize_geos_mod
 !----------------------------------------------------------------------------
    subroutine getEgeos(time,nGeosSets,w,dw,ddw,z,dz,Geos,dpFlow,dzFlow)
@@ -157,15 +160,15 @@ contains
       !   Output of axisymmetric zonal flow, its relative strength,
       !   its time variation, and all forces acting on it.
       !   The slowest part in the TO process is the repitions calculation
-      !   of Plms by subroutine plm_theta. They are needed in getDVptr 
-      !   when I transform on the cylindrical grid. 
-      !   The necessary plms could simply be calculated one and then 
+      !   of Plms by subroutine plm_theta. They are needed in getDVptr
+      !   when I transform on the cylindrical grid.
+      !   The necessary plms could simply be calculated one and then
       !   be stored for later use! See s_outTOnew.f.
       !
 
       !-- Input of variables:
       real(cp),    intent(in) :: time
-      integer,     intent(in) :: nGeosSets 
+      integer,     intent(in) :: nGeosSets
       complex(cp), intent(in) :: w(llm:ulm,n_r_max)
       complex(cp), intent(in) :: dw(llm:ulm,n_r_max)
       complex(cp), intent(in) :: ddw(llm:ulm,n_r_max)
@@ -192,10 +195,10 @@ contains
 
 
       !-- Representation in (phi,z):
-      real(cp) :: VrS(nrp,nZmaxA),VrInt(nZmaxA),VrIntS
-      real(cp) :: VtS(nrp,nZmaxA),VtInt(nZmaxA),VtIntS
-      real(cp) :: VpS(nrp,nZmaxA),VpInt(nZmaxA),VpIntS
-      real(cp) :: VozS(nrp,nZmaxA)
+      real(cp) :: VrS(nrp_geos,nZmaxA),VrInt(nZmaxA),VrIntS
+      real(cp) :: VtS(nrp_geos,nZmaxA),VtInt(nZmaxA),VtIntS
+      real(cp) :: VpS(nrp_geos,nZmaxA),VpInt(nZmaxA),VpIntS
+      real(cp) :: VozS(nrp_geos,nZmaxA)
       real(cp) :: sinT,cosT
       integer :: nInt,nInts   ! index for NHS and SHS integral
       integer :: nZ,nZmax,nZS,nZN
@@ -221,12 +224,12 @@ contains
       character(len=64) :: version
       integer :: nFields,nFieldSize
       real(cp) :: dumm(40)
-      real(outp) :: CVz(nrp,nSmax)
-      real(outp) :: CVor(nrp,nSmax)
-      real(outp) :: CHel(nrp,nSmax)
-      real(outp) :: CVz_Sloc(nrp,nSstart:nSstop)
-      real(outp) :: CVor_Sloc(nrp,nSstart:nSstop)
-      real(outp) :: CHel_Sloc(nrp,nSstart:nSstop)
+      real(outp) :: CVz(nrp_geos,nSmax)
+      real(outp) :: CVor(nrp_geos,nSmax)
+      real(outp) :: CHel(nrp_geos,nSmax)
+      real(outp) :: CVz_Sloc(nrp_geos,nSstart:nSstop)
+      real(outp) :: CVor_Sloc(nrp_geos,nSstart:nSstop)
+      real(outp) :: CHel_Sloc(nrp_geos,nSstart:nSstop)
 
 #ifdef WITH_MPI
       integer :: i,sendcount,recvcounts(0:n_procs-1),displs(0:n_procs-1)
@@ -289,18 +292,18 @@ contains
 
          if ( nGeosSets == 1 ) then
             !------ Initialize integration for NHS:
-            !       Each processor calculates Cheb transform data 
+            !       Each processor calculates Cheb transform data
             !       for HIS nS and the Plms along the Cylinder
             !       chebIntInit returns zZ,nZmaxS,chebt_Z
             call chebIntInit(zMin,zMax,zNorm,nNorm,                   &
                  &           nZmaxA,zZ(:,nS),nZmaxS(nS),chebt_Z(nS))
-            !------ Calculate and store 1/sin(theta) and Plms,dPlms for 
+            !------ Calculate and store 1/sin(theta) and Plms,dPlms for
             !       southern HS:
 
-            if ( lTC ) then 
+            if ( lTC ) then
                nZmax=nZmaxS(nS)  ! nZmax point in each polar region
             else
-               nZmax=(nZmaxS(nS)-1)/2+1 ! Odd point number !    
+               nZmax=(nZmaxS(nS)-1)/2+1 ! Odd point number !
                ! all together nZmaxS(nS) from
                ! south to north including equator
             end if
@@ -449,7 +452,7 @@ contains
                CVz_Sloc(nPhi,nS) =real(CVz_I,kind=outp)
                CVor_Sloc(nPhi,nS)=real(CVor_I,kind=outp)
                CHel_Sloc(nPhi,nS)=real(CHel_I,kind=outp)
-               CVz_s(nS) =CVz_s(nS) +phiNorm*sZ(nS)*dsZ*CVz_I  
+               CVz_s(nS) =CVz_s(nS) +phiNorm*sZ(nS)*dsZ*CVz_I
                CVor_s(nS)=CVor_s(nS)+phiNorm*sZ(nS)*dsZ*CVor_I
                CHel_s(nS)=CHel_s(nS)+phiNorm*sZ(nS)*dsZ*CHel_I
 
@@ -458,7 +461,7 @@ contains
          end do  ! Loop over phi
 
          if ( lDeriv ) then
-            !--------- dpEkInt treated differently cause phi intergral has 
+            !--------- dpEkInt treated differently cause phi intergral has
             !          already been preformed by getDVptr
             if ( lTC ) then
                nInts=2 ! separate north and south integral
@@ -539,7 +542,7 @@ contains
          CVorOTC=CVorOTC/surf
          CHelOTC=CHelOTC/surf
       end if
-      Ekin=EkSTC+EkNTC+EKOTC ! Can be used for testing 
+      Ekin=EkSTC+EkNTC+EKOTC ! Can be used for testing
 
       dpFlow=0.0_cp
       dzFlow=0.0_cp
@@ -570,7 +573,7 @@ contains
          Geos = Egeos/Ekin ! relative geostrophic kinetic energy
       else
          Geos = 0.0_cp
-         Ekin = -one 
+         Ekin = -one
       end if
 
       if ( l_corrMov ) then
@@ -579,7 +582,7 @@ contains
          do nS=nSstart,nSstop
             if ( sZ(nS) >= r_ICB+0.1_cp .and. sZ(nS) <= r_CMB-0.1_cp ) then
                n=n+1
-            else 
+            else
                do nPhi=1,n_phi_max
                   CVz_Sloc(nPhi,nS) =0.0_cp
                   CVor_Sloc(nPhi,nS)=0.0_cp
@@ -589,11 +592,13 @@ contains
          end do
 
 #ifdef WITH_MPI
-         sendcount  = (nSstop-nSstart+1)*nrp
-         recvcounts = nS_per_rank*nrp
-         recvcounts(n_procs-1)=nS_on_last_rank*nrp
+         sendcount  = (nSstop-nSstart+1)*nrp_geos
          do i=0,n_procs-1
-            displs(i) = i*nS_per_rank*nrp
+            recvcounts(i)=cyl_balance(i)%n_per_rank
+         end do
+         displs(0)=0
+         do i=1,n_procs-1
+            displs(i) = displs(i-1)+recvcounts(i-1)
          end do
 
          call MPI_GatherV(CVZ_Sloc,sendcount,MPI_OUT_REAL,     &
@@ -606,9 +611,9 @@ contains
               &           CHel,recvcounts,displs,MPI_OUT_REAL, &
               &           0,MPI_COMM_WORLD,ierr)
 #else
-         CVz(:,:) =CVz_Sloc(:,:) 
-         CVor(:,:)=CVor_Sloc(:,:) 
-         CHel(:,:)=CHel_Sloc(:,:) 
+         CVz(:,:) =CVz_Sloc(:,:)
+         CVor(:,:)=CVor_Sloc(:,:)
+         CHel(:,:)=CHel_Sloc(:,:)
 #endif
 
       end if
@@ -703,7 +708,7 @@ contains
 !----------------------------------------------------------------------------
    subroutine outPV(time,l_stop_time,nPVsets,w,dw,ddw,z,dz,omega_IC,omega_MA)
       !
-      !   Output of z-integrated axisymmetric rotation rate Vp/s 
+      !   Output of z-integrated axisymmetric rotation rate Vp/s
       !   and s derivatives
       !
 
@@ -746,14 +751,14 @@ contains
       integer :: nC,nR,nPhi
       real(cp) :: thetaZ,rZS!,sinT,cosT
 
-      !-- For PV output files: 
+      !-- For PV output files:
       character(len=80) :: fileName
 
       !-- Output of all three field components:
-      real(cp) :: VsS(nrp,nZmaxA)
-      real(cp) :: VpS(nrp,nZmaxA)
-      real(cp) :: VzS(nrp,nZmaxA)
-      real(cp) :: VorS(nrp,nZmaxA)
+      real(cp) :: VsS(nrp_geos,nZmaxA)
+      real(cp) :: VpS(nrp_geos,nZmaxA)
+      real(cp) :: VzS(nrp_geos,nZmaxA)
+      real(cp) :: VorS(nrp_geos,nZmaxA)
       real(outp) :: frame(5,n_phi_max*nZmaxA,nSmax)
 
       integer :: n_pvz_file, n_vcy_file
@@ -884,37 +889,43 @@ contains
             end do
          end if
 
-      end do  ! Loop over s 
+      end do  ! Loop over s
 
       if ( l_stop_time ) then
 
 #ifdef WITH_MPI
          sendcount  = (nSstop-nSstart+1)*nZmaxA
          do i=0,n_procs-1
-            recvcounts(i) = nS_per_rank*nZmaxA
-            displs(i) = i*nS_per_rank*nZmaxA
+            recvcounts(i) = cyl_balance(i)%n_per_rank*nZmaxA
          end do
-         recvcounts(n_procs-1)=nS_on_last_rank*nZmaxA
+         displs(0)=0
+         do i=1,n_procs-1
+            displs(i) = displs(i-1)+recvcounts(i-1)
+         end do
          call MPI_GatherV(omS_Sloc, sendcount, MPI_DEF_REAL,      &
               &           omS, recvcounts, displs, MPI_DEF_REAL,  &
               &           0, MPI_COMM_WORLD, ierr)
 
          sendcount  = (nSstop-nSstart+1)*nZmaxA*n_phi_max*5
          do i=0,n_procs-1
-            recvcounts(i) = nS_per_rank*nZmaxA*n_phi_max*5
-            displs(i) = i*nS_per_rank*nZmaxA*n_phi_max*5
+            recvcounts(i) = cyl_balance(i)%n_per_rank*nZmaxA*n_phi_max*5
          end do
-         recvcounts(n_procs-1)=nS_on_last_rank*nZmaxA*n_phi_max*5
+         displs(0)=0
+         do i=1,n_procs-1
+            displs(i) = displs(i-1)+recvcounts(i-1)
+         end do
          call MPI_GatherV(frame_Sloc, sendcount, MPI_OUT_REAL,    &
               &           frame, recvcounts, displs, MPI_OUT_REAL,&
               &           0, MPI_COMM_WORLD, ierr)
 
          sendcount  = (nSstop-nSstart+1)
          do i=0,n_procs-1
-            recvcounts(i) = nS_per_rank
-            displs(i) = i*nS_per_rank
+            recvcounts(i) = cyl_balance(i)%n_per_rank
          end do
-         recvcounts(n_procs-1)=nS_on_last_rank
+         displs(0)=0
+         do i=1,n_procs-1
+            displs(i) = displs(i-1)+recvcounts(i-1)
+         end do
          call MPI_GatherV(nZC_Sloc, sendcount, MPI_INTEGER,       &
               &           nZC, recvcounts, displs, MPI_INTEGER,   &
               &           0, MPI_COMM_WORLD, ierr)
@@ -983,7 +994,7 @@ contains
       !  When kindCalc=1, the subroutine also calculates dpEk and dzEk which
       !  are phi averages of (d Vr/d phi)**2 + (d Vtheta/ d phi)**2 + (d Vphi/ d phi)**2
       !  and (d Vr/d z)**2 + (d Vtheta/ d z)**2 + (d Vphi/ d z)**2, respectively.
-      !  
+      !
       !  .. note:: on input wS=w/r^2, dwS=dw/r, ddwS=ddw/r, zS=z/r
       !
 
@@ -1000,31 +1011,31 @@ contains
       real(cp),    intent(in) :: dPlmS(lm_max,nZmaxA/2+1)
       real(cp),    intent(in) :: OsinTS(nZmaxA/2+1)
       integer,     intent(in) :: kindCalc
-    
+
       !--- Output: function on azimuthal grid points defined by FT!
-      real(cp), intent(out) :: VrS(nrp,nZmaxA)
-      real(cp), intent(out) :: VtS(nrp,nZmaxA)
-      real(cp), intent(out) :: VpS(nrp,nZmaxA)
-      real(cp), intent(out) :: VorS(nrp,nZmaxA)
+      real(cp), intent(out) :: VrS(nrp_geos,nZmaxA)
+      real(cp), intent(out) :: VtS(nrp_geos,nZmaxA)
+      real(cp), intent(out) :: VpS(nrp_geos,nZmaxA)
+      real(cp), intent(out) :: VorS(nrp_geos,nZmaxA)
       real(cp), optional, intent(out) :: dpEk(nZmaxA)
-    
+
       !--- Local variables:
       real(cp) :: chebS(n_r_max)
       integer :: nS,nN,mc,lm,l,m,nCheb,nPhi,n
       real(cp) :: x,phiNorm,mapFac,OS,cosT,sinT,Or_e1,Or_e2
       complex(cp) :: Vr,Vt1,Vt2,Vp1,Vp2,Vor,Vot1,Vot2
-      real(cp) :: VotS(nrp,nZmaxA)
+      real(cp) :: VotS(nrp_geos,nZmaxA)
       complex(cp) :: wSr,dwSr,ddwSr,zSr,dzSr
-    
-      real(cp) :: dV(nrp,nZmaxA)
+
+      real(cp) :: dV(nrp_geos,nZmaxA)
       complex(cp) :: dp
-    
-    
+
+
       mapFac=two/(rMax-rMin)
       phiNorm=two*pi/n_phi_max
-    
+
       do nS=1,nZmax
-         do mc=1,nrp
+         do mc=1,nrp_geos
             VrS(mc,nS) =0.0_cp
             VtS(mc,nS) =0.0_cp
             VpS(mc,nS) =0.0_cp
@@ -1032,10 +1043,10 @@ contains
             VotS(mc,nS)=0.0_cp
          end do
       end do
-    
+
       do nN=1,nZmax/2    ! Loop over all (r,theta) points in NHS
          nS=nZmax-nN+1   ! Southern counterpart !
-    
+
          !------ Calculate Chebs:
          !------ Map r to cheb interval [-1,1]:
          !       and calculate the cheb polynomia:
@@ -1051,7 +1062,7 @@ contains
          chebS(1)      =half*chebS(1)
          chebS(n_r_max)=half*chebS(n_r_max)
          Or_e2=one/rS(nN)**2
-    
+
          do lm=1,lm_max     ! Sum over lms
             l =lm2l(lm)
             m =lm2m(lm)
@@ -1109,14 +1120,14 @@ contains
                VotS(2*mc-1,nS)=VotS(2*mc-1,nS)+ real(Vot1-Vot2)
                VotS(2*mc  ,nS)=VotS(2*mc  ,nS)+aimag(Vot1-Vot2)
             end if
-    
+
          end do
-    
+
       end do
-    
+
       if ( mod(nZmax,2) == 1 ) then ! Remaining equatorial point
          nS=(nZmax+1)/2
-    
+
          x=two*(rS(nS)-half*(rMin+rMax))/(rMax-rMin)
          chebS(1)=one*rscheme_oc%rnorm ! Extra cheb_norm cheap here
          chebS(2)=x*rscheme_oc%rnorm
@@ -1126,7 +1137,7 @@ contains
          chebS(1)      =half*chebS(1)
          chebS(n_r_max)=half*chebS(n_r_max)
          Or_e2=one/rS(nS)**2
-    
+
          do lm=1,lm_max     ! Sum over lms
             l =lm2l(lm)
             m =lm2m(lm)
@@ -1151,7 +1162,7 @@ contains
             Vor =  zSr* PlmS(lm,nS)*dLh(lm)
             Vot1= dzSr*dPlmS(lm,nS)
             Vot2= (wSr*Or_e2-ddwSr) * PlmS(lm,nS)*dPhi(lm)
-    
+
             VrS(2*mc-1, nN)=VrS(2*mc-1,nN) + real(Vr)
             VrS(2*mc  , nN)=VrS(2*mc  ,nN) +aimag(Vr)
             VtS(2*mc-1, nN)=VtS(2*mc-1,nN) + real(Vt1+Vt2)
@@ -1163,9 +1174,9 @@ contains
             VotS(2*mc-1,nN)=VotS(2*mc-1,nN)+ real(Vot1+Vot2)
             VotS(2*mc  ,nN)=VotS(2*mc  ,nN)+aimag(Vot1+Vot2)
          end do
-    
+
       end if ! Equatorial point ?
-    
+
       !--- Extra factors, contructing z-vorticity:
       do nS=1,(nZmax+1)/2 ! North HS
          OS   =OsinTS(nS)
@@ -1192,14 +1203,14 @@ contains
             VorS(2*mc-1,nS)=cosT*Or_e2*VorS(2*mc-1,nS) - Or_e1*VotS(2*mc-1,nS)
             VorS(2*mc  ,nS)=cosT*Or_e2*VorS(2*mc  ,nS) - Or_e1*VotS(2*mc  ,nS)
          end do
-         do mc=2*n_m_max+1,nrp
-            VrS(mc,nS) =0.0_cp           
-            VpS(mc,nS) =0.0_cp           
-            VtS(mc,nS) =0.0_cp           
-            VorS(mc,nS)=0.0_cp           
+         do mc=2*n_m_max+1,nrp_geos
+            VrS(mc,nS) =0.0_cp
+            VpS(mc,nS) =0.0_cp
+            VtS(mc,nS) =0.0_cp
+            VorS(mc,nS)=0.0_cp
          end do
       end do
-    
+
       do nS=(nZmax+1)/2+1,nZmax ! South HS
          OS   =OsinTS(nZmax-nS+1)
          sinT =one/OS
@@ -1225,14 +1236,14 @@ contains
             VorS(2*mc-1,nS)=cosT*Or_e2*VorS(2*mc-1,nS) - Or_e1*VotS(2*mc-1,nS)
             VorS(2*mc  ,nS)=cosT*Or_e2*VorS(2*mc  ,nS) - Or_e1*VotS(2*mc  ,nS)
          end do
-         do mc=2*n_m_max+1,nrp
-            VrS(mc,nS) =0.0_cp           
-            VpS(mc,nS) =0.0_cp           
-            VtS(mc,nS) =0.0_cp           
-            VorS(mc,nS)=0.0_cp           
+         do mc=2*n_m_max+1,nrp_geos
+            VrS(mc,nS) =0.0_cp
+            VpS(mc,nS) =0.0_cp
+            VtS(mc,nS) =0.0_cp
+            VorS(mc,nS)=0.0_cp
          end do
       end do
-    
+
       if ( present(dpEk) ) then
          !--- Calculate phi derivative in lm-space:
          do n=1,3
@@ -1257,14 +1268,14 @@ contains
                      dV(2*mc  ,nS)=aimag(dp)*VpS(2*mc-1,nS)+ real(dp)*VpS(2*mc,nS)
                   end do
                end if
-               do mc=2*n_m_max+1,nrp
+               do mc=2*n_m_max+1,nrp_geos
                   dV(mc,nS)=0.0_cp
                end do
             end do
-    
+
             !--- Transform m 2 phi for phi-derivative
-            if ( .not. l_axi ) call fft_to_real(dV,nrp,nZmax)
-    
+            if ( .not. l_axi ) call fft_to_real(dV,nrp_geos,nZmax)
+
             !--- Phi average
             do nS=1,nZmax
                do nPhi=1,n_phi_max
@@ -1278,19 +1289,19 @@ contains
                end do
                if ( n == 3 ) dpEk(nS)=phiNorm*dpEk(nS)
             end do
-    
+
          end do ! Loop over components
 
       end if
-    
+
       !----- Transform m 2 phi for flow field:
       if ( .not. l_axi ) then
-         call fft_to_real(VrS,nrp,nZmax)
-         call fft_to_real(VtS,nrp,nZmax)
-         call fft_to_real(VpS,nrp,nZmax)
-         call fft_to_real(VorS,nrp,nZmax)
+         call fft_to_real(VrS,nrp_geos,nZmax)
+         call fft_to_real(VtS,nrp_geos,nZmax)
+         call fft_to_real(VpS,nrp_geos,nZmax)
+         call fft_to_real(VorS,nrp_geos,nZmax)
       end if
-    
+
    end subroutine getDVptr
 !----------------------------------------------------------------------------
    subroutine costf_arrays(w,dw,ddw,z,dz)

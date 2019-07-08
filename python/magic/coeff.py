@@ -90,7 +90,7 @@ class MagicCoeffCmb(MagicSetup):
     """
 
     def __init__(self, tag=None, datadir='.', ratio_cmb_surface=1, scale_b=1,
-                 iplot=True, lCut=None, precision='Float64', ave=False, sv=False,
+                 iplot=True, lCut=None, precision=np.float64, ave=False, sv=False,
                  quiet=False):
         """
         A class to read the B_coeff_cmb files
@@ -196,7 +196,7 @@ class MagicCoeffCmb(MagicSetup):
         # Rearange data
         data = np.array(data, dtype=precision)
         self.nstep = data.shape[0]
-        self.blm = np.zeros((self.nstep, self.lm_max_cmb), 'Complex64')
+        self.blm = np.zeros((self.nstep, self.lm_max_cmb), np.complex128)
         self.blm[:, 1:self.l_max_cmb+1] = data[:, 1:self.l_max_cmb+1]
         self.blm[:, self.l_max_cmb+1:] = data[:, self.l_max_cmb+1::2]+\
                                          1j*data[:, self.l_max_cmb+2::2]
@@ -259,7 +259,10 @@ class MagicCoeffCmb(MagicSetup):
 
             # Secular variation
             self.ESVlM = facT * np.trapz(self.ESVl, self.time, axis=0)
-            self.taul = np.sqrt(self.ElM[1:]/self.ESVlM[1:])
+            if abs(self.ESVlM[1:]).min() > 0.:
+                self.taul = np.sqrt(self.ElM[1:]/self.ESVlM[1:])
+            else:
+                self.taul = np.zeros_like(self.ElM[1:])
 
         if iplot:
             self.plot()
@@ -310,7 +313,7 @@ class MagicCoeffCmb(MagicSetup):
                 ms_new[idx_new[l,m]] = m
                 k +=1
 
-        blm_new = np.zeros((self.nstep, self.lm_max_cmb), 'Complex64')
+        blm_new = np.zeros((self.nstep, self.lm_max_cmb), np.complex128)
         for l in range(1, self.l_max_cmb+1):
             for m in range(0, l+1, self.minc):
                 lm = idx_new[l, m]
@@ -320,7 +323,6 @@ class MagicCoeffCmb(MagicSetup):
         self.ell = ell_new
         self.ms = ms_new
         self.blm = blm_new
-
 
     def plot(self):
         """
@@ -411,11 +413,11 @@ class MagicCoeffCmb(MagicSetup):
         idx = np.nonzero(mask)[0][0]
 
         # Transform data on grid space
-        BrCMB = np.zeros((self.nstep, nphi, nlat), 'Float64')
+        BrCMB = np.zeros((self.nstep, nphi, nlat), np.float64)
         if deminc:
-            dat = np.zeros((self.nstep, self.minc*nphi+1), 'Float64')
+            dat = np.zeros((self.nstep, self.minc*nphi+1), np.float64)
         else:
-            dat = np.zeros((self.nstep, nphi), 'Float64')
+            dat = np.zeros((self.nstep, nphi), np.float64)
         for k in range(self.nstep):
             tmp = sh.synth(blmCut[k, :]*sh.l*(sh.l+1)/self.rcmb**2)
             tmp = tmp.T # Longitude, Latitude
@@ -465,7 +467,7 @@ class MagicCoeffCmb(MagicSetup):
 
     def movieCmb(self, cut=0.5, levels=12, cm='RdYlBu_r', png=False, step=1,
                  normed=False, dpi=80, bgcolor=None, deminc=True, removeMean=False,
-                 precision='Float64', contour=False, mer=False):
+                 precision=np.float64, contour=False, mer=False):
         """
         Plotting function (it can also write the png files)
 
@@ -647,7 +649,7 @@ class MagicCoeffR(MagicSetup):
     """
 
     def __init__(self, tag, ratio_cmb_surface=1, scale_b=1, iplot=True,
-                 field='B', r=1, precision='Float64', lCut=None, quiet=False):
+                 field='B', r=1, precision=np.float64, lCut=None, quiet=False):
         """
         :param tag: if you specify a pattern, it tries to read the corresponding files
         :type tag: str
@@ -686,7 +688,10 @@ class MagicCoeffR(MagicSetup):
         for k, file in enumerate(files):
             if not quiet: print('Reading %s' % file)
             f = npfile(file, endian='B')
-            out = f.fort_read('3i4,%s' % precision)[0]
+            if precision == np.float32:
+                out = f.fort_read('3i4,f4')[0]
+            else:
+                out = f.fort_read('3i4,f8')[0]
             self.l_max_r, self.minc, n_data = out[0]
             self.m_max_r = int((self.l_max_r/self.minc)*self.minc)
             self.radius = out[1]
@@ -718,9 +723,9 @@ class MagicCoeffR(MagicSetup):
         # Rearange data
         data = np.array(data, dtype=precision)
         self.nstep = data.shape[0]
-        self.wlm = np.zeros((self.nstep, self.lm_max_r), 'Complex64')
-        self.dwlm = np.zeros((self.nstep, self.lm_max_r), 'Complex64')
-        self.zlm = np.zeros((self.nstep, self.lm_max_r), 'Complex64')
+        self.wlm = np.zeros((self.nstep, self.lm_max_r), np.complex128)
+        self.dwlm = np.zeros((self.nstep, self.lm_max_r), np.complex128)
+        self.zlm = np.zeros((self.nstep, self.lm_max_r), np.complex128)
 
         # Get time
         self.time = np.zeros(self.nstep, dtype=precision)
@@ -751,7 +756,7 @@ class MagicCoeffR(MagicSetup):
 
         # ddw in case B is stored
         if field == 'B':
-            self.ddwlm = np.zeros((self.nstep, self.lm_max_r), 'Complex64')
+            self.ddwlm = np.zeros((self.nstep, self.lm_max_r), np.complex128)
             self.ddwlm[:, 1:self.l_max_r+1] = data[:, k:k+self.l_max_r]
             k += self.l_max_r
             for m in range(self.minc, self.l_max_r+1, self.minc):
@@ -831,11 +836,11 @@ class MagicCoeffR(MagicSetup):
                 ms_new[idx_new[l,m]] = m
                 k +=1
 
-        wlm_new = np.zeros((self.nstep, self.lm_max_r), 'Complex64')
-        dwlm_new = np.zeros((self.nstep, self.lm_max_r), 'Complex64')
-        zlm_new = np.zeros((self.nstep, self.lm_max_r), 'Complex64')
+        wlm_new = np.zeros((self.nstep, self.lm_max_r), np.complex128)
+        dwlm_new = np.zeros((self.nstep, self.lm_max_r), np.complex128)
+        zlm_new = np.zeros((self.nstep, self.lm_max_r), np.complex128)
         if field == 'B':
-            ddwlm_new = np.zeros((self.nstep, self.lm_max_r), 'Complex64')
+            ddwlm_new = np.zeros((self.nstep, self.lm_max_r), np.complex128)
 
         for l in range(1, self.l_max_r+1):
             for m in range(0, l+1, self.minc):
@@ -866,7 +871,7 @@ class MagicCoeffR(MagicSetup):
 
     def movieRad(self, cut=0.5, levels=12, cm='RdYlBu_r', png=False, step=1,
                  normed=False, dpi=80, bgcolor=None, deminc=True, removeMean=False,
-                 precision='Float64', contour=False, mer=False):
+                 precision=np.float64, contour=False, mer=False):
         """
         Plotting function (it can also write the png files)
 

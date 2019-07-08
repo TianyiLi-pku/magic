@@ -6,10 +6,11 @@ module RMS_helpers
 
    use precision_mod
    use parallel_mod
+   use communications, only: reduce_radial
    use truncation, only: l_max, lm_max_dtB, n_r_max, lm_max
    use blocking, only: lm2, st_map
    use radial_functions, only: or2, rscheme_oc, r
-   use horizontal_data, only: osn1, Plm, dPlm, dLh
+   use horizontal_data, only: dLh
    use useful, only: cc2real
    use integration, only: rInt_R
    use LMmapping, only: mappings
@@ -19,56 +20,11 @@ module RMS_helpers
 
    private
 
-   public :: get_PASLM, get_PolTorRms, hInt2dPol, hInt2Pol, hInt2Tor, &
-   &         get_RAS, hIntRms, hInt2PolLM, hInt2TorLM, hInt2dPolLM
+   public :: get_PolTorRms, hInt2dPol, hInt2Pol, hInt2Tor, &
+   &         hIntRms, hInt2PolLM, hInt2TorLM, hInt2dPolLM
 
 contains
 
-   subroutine get_PASLM(Tlm,Bp,rT,nThetaStart,sizeThetaBlock)
-      !
-      !  Purpose of this subroutine is to calculated the axisymmetric     
-      !  phi component Bp of an axisymmetric toroidal field Tlm           
-      !  given in spherical harmonic space (l,m=0).                       
-      !
-
-      !-- Input variables:
-      integer,     intent(in) :: nThetaStart    ! first theta to be treated
-      integer,     intent(in) :: sizeThetaBlock ! size of theta block
-      real(cp),    intent(in) :: rT             ! radius
-      complex(cp), intent(in) :: Tlm(lm_max_dtB) ! field in (l,m)-space for rT
-
-      !-- Output variables:
-      real(cp), intent(out) :: Bp(*)
-
-      !-- Local variables:
-      integer :: lm,l
-      integer :: nTheta,nThetaN
-      real(cp) :: fac
-      real(cp) :: sign
-      real(cp) :: Bp_1,Bp_n,Bp_s
-
-      do nTheta=1,sizeThetaBlock,2 ! loop over thetas in northers HS
-
-         nThetaN=(nThetaStart+nTheta)/2
-         fac=osn1(nThetaN)/rT
-
-         sign=-one
-         Bp_n=0.0_cp
-         Bp_s=0.0_cp
-         do l=0,l_max
-            lm=lm2(l,0)
-            sign=-sign
-            Bp_1=-real(Tlm(l+1))*dPlm(lm,nThetaN)
-            Bp_n=Bp_n+Bp_1
-            Bp_s=Bp_s-sign*Bp_1
-         end do  ! Loop over degree
-         Bp(nTheta)  =fac*Bp_n
-         Bp(nTheta+1)=fac*Bp_s
-
-      end do        ! Loop over colatitudes
-
-   end subroutine get_PASLM
-!---------------------------------------------------------------------------
    subroutine get_PolTorRms(Pol,drPol,Tor,llm,ulm,PolRms,TorRms, &
               &             PolAsRms,TorAsRms,map)
       !
@@ -81,7 +37,7 @@ contains
       !  arrays Pol,drPol and Tor
       !  Output: PolRms,TorRms,PolAsRms,TorAsRms
       !
-    
+
       !-- Input variables:
       integer,         intent(in) :: llm
       integer,         intent(in) :: ulm
@@ -89,34 +45,34 @@ contains
       complex(cp),     intent(in) :: drPol(llm:ulm,n_r_max) ! Radial derivative of Pol
       complex(cp),     intent(in) :: Tor(llm:ulm,n_r_max)   ! Toroidal field Potential
       type(mappings),  intent(in) :: map
-    
+
       !-- Output variables:
       real(cp), intent(out) :: PolRms,PolAsRms
       real(cp), intent(out) :: TorRms,TorAsRms
-    
+
       !-- Local variables:
       real(cp) :: PolRmsTemp,TorRmsTemp
       real(cp) :: PolRms_r(n_r_max), PolRms_r_global(n_r_max)
       real(cp) :: TorRms_r(n_r_max), TorRms_r_global(n_r_max)
       real(cp) :: PolAsRms_r(n_r_max), PolAsRms_r_global(n_r_max)
       real(cp) :: TorAsRms_r(n_r_max), TorAsRms_r_global(n_r_max)
-    
+
       integer :: n_r,lm,l,m
       real(cp) :: fac
-    
+
       do n_r=1,n_r_max
-    
+
          PolRms_r(n_r)  =0.0_cp
          TorRms_r(n_r)  =0.0_cp
          PolAsRms_r(n_r)=0.0_cp
          TorAsRms_r(n_r)=0.0_cp
-    
+
          do lm=max(2,llm),ulm
             l=map%lm2l(lm)
             m=map%lm2m(lm)
             PolRmsTemp= dLh(st_map%lm2(l,m)) * (                        &
-                 dLh(st_map%lm2(l,m))*or2(n_r)*cc2real(Pol(lm,n_r),m) + &
-                 cc2real(drPol(lm,n_r),m) )
+            &    dLh(st_map%lm2(l,m))*or2(n_r)*cc2real(Pol(lm,n_r),m) + &
+            &    cc2real(drPol(lm,n_r),m) )
             TorRmsTemp=   dLh(st_map%lm2(l,m))*cc2real(Tor(lm,n_r),m)
             if ( m == 0 ) then  ! axisymmetric part
                PolAsRms_r(n_r)=PolAsRms_r(n_r) + PolRmsTemp
@@ -130,21 +86,10 @@ contains
          TorRms_r(n_r)=TorRms_r(n_r) + TorAsRms_r(n_r)
       end do    ! radial grid points
 
-#ifdef WITH_MPI
-      call MPI_Reduce(PolRms_r, PolRms_r_global, n_r_max, MPI_DEF_REAL, MPI_SUM, &
-           &          0, MPI_COMM_WORLD, ierr)
-      call MPI_Reduce(PolAsRms_r, PolAsRms_r_global, n_r_max, MPI_DEF_REAL, MPI_SUM, &
-           &          0, MPI_COMM_WORLD, ierr)
-      call MPI_Reduce(TorRms_r, TorRms_r_global, n_r_max, MPI_DEF_REAL, MPI_SUM, &
-           &          0, MPI_COMM_WORLD, ierr)
-      call MPI_Reduce(TorAsRms_r, TorAsRms_r_global, n_r_max, MPI_DEF_REAL, MPI_SUM, &
-           &          0, MPI_COMM_WORLD, ierr)
-#else
-      PolRms_r_global(:)  =PolRms_r(:)
-      PolAsRms_r_global(:)=PolAsRms_r(:)
-      TorRms_r_global(:)  =TorRms_r(:)
-      TorAsRms_r_global(:)=TorAsRms_r(:)
-#endif
+      call reduce_radial(PolRms_r, PolRms_r_global, 0)
+      call reduce_radial(PolAsRms_r, PolAsRms_r_global, 0)
+      call reduce_radial(TorRms_r, TorRms_r_global, 0)
+      call reduce_radial(TorAsRms_r, TorAsRms_r_global, 0)
 
       if ( rank == 0 ) then
          !-- Radial Integrals:
@@ -162,19 +107,19 @@ contains
    end subroutine get_PolTorRms
 !-----------------------------------------------------------------------------
    subroutine hInt2dPol(dPol,lmStart,lmStop,Pol2hInt,map)
-    
+
       !-- Input variables:
       integer,         intent(in) :: lmStart,lmStop
       complex(cp),     intent(in) :: dPol(lmStart:lmStop)   ! Toroidal field Potential
       type(mappings),  intent(in) :: map
-    
+
       !-- Output variables:
       real(cp), intent(inout) :: Pol2hInt(0:l_max)
-    
+
       !-- Local variables:
       real(cp) :: help
       integer :: lm,l,m
-    
+
       do lm=lmStart,lmStop
          l=map%lm2l(lm)
          m=map%lm2m(lm)
@@ -188,7 +133,7 @@ contains
 
       !-- Input variables
       integer,         intent(in) :: lmStart,lmStop
-      complex(cp),     intent(in) :: dPol(lmStart:lmStop) 
+      complex(cp),     intent(in) :: dPol(lmStart:lmStop)
       type(mappings),  intent(in) :: map
 
       !-- Output variables
@@ -291,10 +236,10 @@ contains
                ! The l(l+1) factor comes from the orthogonality properties of
                ! vector spherical harmonics
 #ifdef WITH_SHTNS
-               help=rE2*cc2real(f(lm),m)*l*(l+one)!*l*(l+1) 
+               help=rE2*cc2real(f(lm),m)*l*(l+one)!*l*(l+1)
 #else
                if ( l /= 0 ) then
-                  help=rE2*cc2real(f(lm),m)/(l*(l+one)) 
+                  help=rE2*cc2real(f(lm),m)/(l*(l+one))
                else
                   help=rE2*cc2real(f(lm),m)
                end if
@@ -316,14 +261,14 @@ contains
       integer,         intent(in) :: nR
       integer,         intent(in) :: lmStart,lmStop
       type(mappings),  intent(in) :: map
-    
+
       !-- Output variables:
       real(cp),        intent(inout) :: Tor2hInt(0:l_max)
-    
+
       !-- Local variables:
       real(cp) :: help,rE4
       integer :: lm,l,m
-    
+
       rE4=r(nR)**4
       do lm=lmStart,lmStop
          l=map%lm2l(lm)
@@ -331,7 +276,7 @@ contains
          help=rE4/dLh(st_map%lm2(l,m))*cc2real(Tor(lm),m)
          Tor2hInt(l)=Tor2hInt(l)+help
       end do
-    
+
    end subroutine hInt2Tor
 !-----------------------------------------------------------------------------
    subroutine hInt2TorLM(Tor,lb,ub,nR,lmStart,lmStop,Tor2hInt,map)
@@ -342,14 +287,14 @@ contains
       integer,         intent(in) :: nR
       integer,         intent(in) :: lmStart,lmStop
       type(mappings),  intent(in) :: map
-    
+
       !-- Output variables:
       real(cp),        intent(inout) :: Tor2hInt(lb:ub)
-    
+
       !-- Local variables:
       real(cp) :: help,rE4
       integer :: lm,l,m
-    
+
       rE4=r(nR)**4
       do lm=lmStart,lmStop
          l=map%lm2l(lm)
@@ -357,52 +302,7 @@ contains
          help=rE4/dLh(st_map%lm2(l,m))*cc2real(Tor(lm),m)
          Tor2hInt(lm)=Tor2hInt(lm)+help
       end do
-    
+
    end subroutine hInt2TorLM
-!-----------------------------------------------------------------------------
-   subroutine get_RAS(Blm,Br,rT,nThetaStart,sizeThetaBlock)
-      !
-      !  Purpose of this subroutine is to calculate the axisymmetric      
-      !  radial component Br of an axisymmetric ploidal field Blm         
-      !  given in spherical harmonic space (l,m=0).                       
-      !
-
-      !-- Input variables:
-      integer,         intent(in) :: nThetaStart    ! first theta to be treated
-      integer,         intent(in) :: sizeThetaBlock ! last theta
-      real(cp),        intent(in) :: rT             ! radius
-      complex(cp),     intent(in) :: Blm(lm_max_dtB)! field in (l,m)-space for rT
-
-      !-- Output variables:
-      real(cp), intent(out) :: Br(*)
-
-      !-- Local variables:
-      integer :: lm,l
-      integer :: nTheta,nThetaN
-      real(cp) :: fac
-      real(cp) :: sign
-      real(cp) :: Br_1,Br_n,Br_s
-
-      fac=one/(rT*rT)
-
-      do nTheta=1,sizeThetaBlock,2 ! loop over thetas in northers HS
-         nThetaN=(nThetaStart+nTheta)/2
-
-         sign=-one
-         Br_n=0.0_cp
-         Br_s=0.0_cp
-         do l=0,l_max
-            lm=lm2(l,0)
-            sign=-sign
-            Br_1=real(Blm(l+1))*real(l*(l+1),kind=cp)*Plm(lm,nThetaN)
-            Br_n=Br_n+Br_1
-            Br_s=Br_s+sign*Br_1
-         end do  ! Loop over degree
-         Br(nTheta)  =fac*Br_n
-         Br(nTheta+1)=fac*Br_s
-
-      end do        ! Loop over colatitudes
-
-    end subroutine get_RAS
 !-----------------------------------------------------------------------------
 end module RMS_helpers
