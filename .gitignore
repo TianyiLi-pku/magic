@@ -8,6 +8,5 @@ perf.*.xml
 TAGS
 *~
 
-samples/**/*.txt
-samples/**/*_BIS
-samples/**/*.test
+samples/*
+build*

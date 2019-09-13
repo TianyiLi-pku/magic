@@ -50,22 +50,23 @@ contains
 
    subroutine initialize_updateS
 
+   !>@ TODO the bytes_allocated variable is completely wrong here! 
       allocate( s0Mat(n_r_max,n_r_max), s0Mat_new(n_r_max,n_r_max) )      ! for l=m=0  
-      allocate( sMat(n_r_max,n_r_max,l_max), sMat_new(n_r_max,n_r_max,l_max) )
+      allocate( sMat(n_r_max,n_r_max,l_max), sMat_new(n_r_max,n_r_max,n_lo_loc) )
       bytes_allocated = bytes_allocated+(n_r_max*n_r_max*(1+l_max))* &
       &                 SIZEOF_DEF_REAL
       allocate( s0Pivot(n_r_max), s0Pivot_new(n_r_max) )
-      allocate( sPivot(n_r_max,l_max), sPivot_new(n_r_max,l_max) )
+      allocate( sPivot(n_r_max,l_max), sPivot_new(n_r_max,n_lo_loc) )
       bytes_allocated = bytes_allocated+(n_r_max+n_r_max*l_max)*SIZEOF_INTEGER
 #ifdef WITH_PRECOND_S
-      allocate(sMat_fac(n_r_max,l_max), sMat_fac_new(n_r_max,l_max))
+      allocate(sMat_fac(n_r_max,l_max), sMat_fac_new(n_r_max,n_lo_loc))
       bytes_allocated = bytes_allocated+n_r_max*l_max*SIZEOF_DEF_REAL
 #endif
 #ifdef WITH_PRECOND_S0
       allocate(s0Mat_fac(n_r_max), s0Mat_fac_new(n_r_max))
       bytes_allocated = bytes_allocated+n_r_max*SIZEOF_DEF_REAL
 #endif
-      allocate( lSmat(0:l_max), lSmat_new(0:l_max) )
+      allocate( lSmat(0:l_max), lSmat_new(n_lo_loc) )
       bytes_allocated = bytes_allocated+(l_max+1)*SIZEOF_LOGICAL
 
 #ifdef WITHOMP
@@ -83,13 +84,14 @@ contains
    subroutine finalize_updateS
 
       deallocate( s0Mat, sMat, s0Pivot, sPivot, lSmat )
+      deallocate( s0Mat_new, sMat_new, s0Pivot_new, sPivot_new, lSmat_new )
 #ifdef WITH_PRECOND_S
-      deallocate( sMat_fac )
+      deallocate( sMat_fac, sMat_fac_new )
 #endif
 #ifdef WITH_PRECOND_S0
-      deallocate( s0Mat_fac )
+      deallocate( s0Mat_fac, s0Mat_fac_new )
 #endif
-      deallocate( rhs1 )
+      deallocate( rhs1, rhs1_new )
   
    end subroutine finalize_updateS
 !------------------------------------------------------------------------------
@@ -260,7 +262,6 @@ contains
 #ifdef WITH_PRECOND_S0
                   rhs = s0Mat_fac*rhs
 #endif
-
                   call solve_mat(s0Mat,n_r_max,n_r_max,s0Pivot,rhs)
 
                else ! l1  /=  0
@@ -297,7 +298,6 @@ contains
                lm1=lm22lm(lm,nLMB2,nLMB)
                !l1 =lm22l(lm,nLMB2,nLMB)
                m1 =lm22m(lm,nLMB2,nLMB)
-! ! !                print *, "~~~OldFmt~~~~~~> ", l1, m1, lm1, map_glbl_st%lm2(l1,m1)
                if ( l1 == 0 ) then
                   do n_r_out=1,rscheme_oc%n_max
                      s(lm1,n_r_out)=rhs(n_r_out)
@@ -423,8 +423,8 @@ contains
       O_dt=one/dt
 
 
-      call get_dr( dVSrLM, work_LMdist, n_mlo_loc,1,n_mlo_loc,n_r_max,rscheme_oc, nocopy=.true. )
       !-- Get radial derivatives of s: work_LMloc,dsdtLast used as work arrays
+      call get_dr( dVSrLM, work_LMdist, n_mlo_loc,1,n_mlo_loc,n_r_max,rscheme_oc, nocopy=.true. )
       do r=1,n_r_max
          do i=1,n_mlo_loc
             dsdt(i,r)=orho1(r)*(dsdt(i,r)-or2(r)*work_LMdist(i,r)- &
@@ -438,7 +438,9 @@ contains
       do lj=1,n_lo_loc
          l = map_mlo%lj2l(lj)
          
-         if ( .not. lSmat_new(l) ) then
+         ! Builds matrices if needed
+         !---------------------------
+         if ( .not. lSmat_new(lj) ) then
             if ( l == 0 ) then
 #ifdef WITH_PRECOND_S0
                call get_s0Mat(dt,s0Mat_new,s0Pivot_new,s0Mat_fac_new)
@@ -447,12 +449,12 @@ contains
 #endif
             else
 #ifdef WITH_PRECOND_S
-               call get_sMat(dt,l,hdif_S(map_glbl_st%lm2(l,0)), sMat_new(:,:,l),sPivot_new(:,l),sMat_fac_new(:,l))
+               call get_sMat(dt,l,hdif_S(map_glbl_st%lm2(l,0)), sMat_new(:,:,lj),sPivot_new(:,lj),sMat_fac_new(:,lj))
 #else
-               call get_sMat(dt,l,hdif_S(map_glbl_st%lm2(l,0)), sMat_new(:,:,l),sPivot_new(:,l))
+               call get_sMat(dt,l,hdif_S(map_glbl_st%lm2(l,0)), sMat_new(:,:,lj),sPivot_new(:,lj))
 #endif
             end if
-            lSmat_new(l)=.true.
+            lSmat_new(lj)=.true.
          end if
          
          ! Loops over the local m's associated with this l
@@ -481,14 +483,14 @@ contains
                rhs1_new(1,mi)      =tops(l,m)
                rhs1_new(n_r_max,mi)=bots(l,m)
 #ifdef WITH_PRECOND_S
-               rhs1_new(1,mi)=      sMat_fac_new(1,l)*rhs1_new(1,mi)
-               rhs1_new(n_r_max,mi)=sMat_fac_new(1,l)*rhs1_new(n_r_max,mi)
+               rhs1_new(1,mi)=      sMat_fac_new(1,lj)*rhs1_new(1,mi)
+               rhs1_new(n_r_max,mi)=sMat_fac_new(1,lj)*rhs1_new(n_r_max,mi)
 #endif
                do r=2,n_r_max-1
                   rhs1_new(r,mi)=s(i,r)*O_dt+w1*dsdt(i,r)  &
                   &                     +w2*dsdtLast(i,r)
 #ifdef WITH_PRECOND_S
-                  rhs1_new(r,mi) = sMat_fac_new(r,l)*rhs1_new(r,mi)
+                  rhs1_new(r,mi) = sMat_fac_new(r,lj)*rhs1_new(r,mi)
 #endif
                end do
             end if
@@ -496,8 +498,8 @@ contains
          
          ! Now we solve all linear systems in a block
          if ( l > 0 ) then
-            call solve_mat(sMat_new(:,:,l),n_r_max,n_r_max, &
-                 &         sPivot_new(:,l),rhs1_new(:,1:nRHS),nRHS)
+            call solve_mat(sMat_new(:,:,lj),n_r_max,n_r_max, &
+                 &         sPivot_new(:,lj),rhs1_new(:,1:nRHS),nRHS)
          end if
          
          ! Loops over the local m's associated with this l (again)

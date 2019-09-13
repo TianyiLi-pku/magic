@@ -95,7 +95,6 @@ use blocking
    type, public :: ml2r_transp
       integer, pointer :: sends(:), recvs(:)
       integer, pointer :: rq(:)
-      integer :: n_fields
       contains
         final :: deallocate_ml2r_transp
         procedure :: wait  => transpose_ml2r_wait
@@ -132,13 +131,12 @@ use blocking
 contains
 
    !----------------------------------------------------------------------------
-   function allocate_ml2r_transp(n_fields) result(ml2r_obj)
+   function allocate_ml2r_transp() result(ml2r_obj)
       !   
       !   Initialize the MPI types for the transposition from ML to Radial
       !   
       !   Author: Rafael Lago (MPCDF) January 2018
       !   
-      integer, intent(in) :: n_fields
       type(ml2r_transp) :: ml2r_obj
       integer :: nsends, nrecvs
       nsends = size(ml2r_dests)
@@ -147,7 +145,6 @@ contains
       allocate(ml2r_obj%rq(nsends+nrecvs))
       ml2r_obj%sends => ml2r_obj%rq(1:nsends)
       ml2r_obj%recvs => ml2r_obj%rq(nsends+1:nrecvs)
-      ml2r_obj%n_fields = n_fields
       
       ml2r_obj%rq = MPI_REQUEST_NULL
    end function allocate_ml2r_transp
@@ -170,39 +167,28 @@ contains
       !   The types for the requests must be created somewhere else!
       !   This is supposed to be a general-purpose transposition. It might be 
       !   possible to optimize it for further specialized data structures.
-      !   The MPI datatype here is built as indexed->hvector->hvector
+      !   The MPI datatype here is built as indexed->resized->vector->resized
       !   
-      !   Author: Rafael Lago (MPCDF) January 2018
+      !   Author: Rafael Lago (MPCDF) January 2019
       !    
       integer :: i, j, l, m, icoord_m, icoord_mlo, icoord_r, in_r, lm, ierr
-      
-      integer :: send_col_types(0:n_ranks_mlo-1), send_mtx_types(0:n_ranks_mlo-1), send_vol_types(0:n_ranks_mlo-1)
-      integer :: recv_col_types(0:n_ranks_mlo-1), recv_mtx_types(0:n_ranks_mlo-1), recv_vol_types(0:n_ranks_mlo-1)
+      integer :: col_type, ext_type, mtx_type
       integer :: send_displacements(n_mlo_array, 0:n_ranks_mlo-1)
       integer :: recv_displacements(n_lm_loc, 0:n_ranks_mlo-1)
       integer :: send_counter_i(0:n_ranks_mlo-1), recv_counter_i(0:n_ranks_mlo-1), inblocks
       integer :: blocklenghts(max(n_mlo_array, n_lm_loc))
       
-      integer (kind=mpi_address_kind) :: lb, bytesCMPLX
-      integer, allocatable :: ml2r_s_coltype(:), ml2r_r_coltype(:)
-      integer, allocatable :: ml2r_s_mtxtype(:), ml2r_r_mtxtype(:)
-      
-      integer :: n_fields = 2   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! DELETE ME
+      integer (kind=mpi_address_kind) :: lb, extend, bytesCMPLX
       integer :: nsends, nrecvs
       
       call mpi_type_get_extent(MPI_DOUBLE_COMPLEX, lb, bytesCMPLX, ierr) 
       
-      send_col_types = MPI_INTEGER  ! Just to be able to test later, if this was already set!
-      recv_col_types = MPI_INTEGER
-      send_mtx_types = MPI_INTEGER
-      recv_mtx_types = MPI_INTEGER
-      send_vol_types = MPI_INTEGER
-      recv_vol_types = MPI_INTEGER
       send_displacements = -1
       recv_displacements = -1
       send_counter_i     = 0
       recv_counter_i     = 0
       blocklenghts       = 1 ! This is actually fixed to 1!
+      lb = 0
       
       !-- Loops over each (m,l) tuple to determine which rank in lmr will need it
       !   There is no good way of doing this; I could loop over the *local* tuples,
@@ -233,21 +219,18 @@ contains
       !   send something to itself, but who knows, maybe I'm missing something
       nsends = count(send_counter_i>0)
       if (send_counter_i(coord_mlo)>0) nsends = nsends - 1
-      allocate(ml2r_s_coltype(nsends))
-      allocate(ml2r_s_mtxtype(nsends))
       allocate(ml2r_s_type(nsends))
       allocate(ml2r_dests(nsends))
       
       !-- Build the Send MPI types:
       !   First we create indexed type; it is a vector which looks more or less like
       !      send_buf({i1,i2,i3,...}, j, k)
-      !   Then we create a type vector which will be a matrix-like structure:
+      !   Then we resize it, so that it has the length of the first dimension. Next
+      !   we build an vector type out of it obtaining
       !      send_buf({i1,i2,i3,...}, l_r:u_r, k)
-      !   Last we create another type vector which will add the number of fields:
-      !      send_buf({i1,i2,i3,...}, l_r:u_r, :)
-      ! 
-      !   The strides must be specified in bytes; therefore, MPI_Type_create_hvector
-      !   must be used.
+      !   Finally, we resize that, so that it comprises the whole data for a single 
+      !   variable. Since we send the whole containers at once, we will be sending
+      !   and array of those last types
       j = 0
       do icoord_mlo=0,n_ranks_mlo-1
          
@@ -259,14 +242,20 @@ contains
             in_r = dist_r(icoord_r,0)
             
             call MPI_Type_indexed(inblocks,blocklenghts(1:inblocks), send_displacements(1:inblocks,icoord_mlo), &
-               MPI_DOUBLE_COMPLEX, ml2r_s_coltype(j), ierr)
+               MPI_DOUBLE_COMPLEX, col_type, ierr)
+               
+            extend = int(n_mlo_loc*bytesCMPLX,kind=mpi_address_kind)
+            call MPI_Type_create_resized(col_type, lb, extend, ext_type, ierr)
             
-            call MPI_Type_create_hvector(in_r, 1, int(n_mlo_loc*bytesCMPLX,kind=mpi_address_kind), &
-               ml2r_s_coltype(j), ml2r_s_mtxtype(j), ierr)
+            call MPI_Type_vector(in_r, 1, 1, ext_type, mtx_type, ierr)
             
-            call MPI_Type_create_hvector(n_fields, 1, int(n_mlo_loc*n_r_max*bytesCMPLX,kind=mpi_address_kind), &
-               ml2r_s_mtxtype(j), ml2r_s_type(j), ierr)
+            extend = int(n_mlo_loc*n_r_max*bytesCMPLX,kind=mpi_address_kind)
+            call MPI_Type_create_resized(mtx_type, lb, extend, ml2r_s_type(j), ierr)
+            
             call MPI_Type_commit(ml2r_s_type(j),ierr)
+            call MPI_Type_free(col_type,ierr)
+            call MPI_Type_free(mtx_type,ierr)
+            call MPI_Type_free(ext_type,ierr)
          end if
       end do
       
@@ -284,8 +273,6 @@ contains
       !-- Counts how many ranks will send to me (similar to nsends)
       nrecvs = count(recv_counter_i>0)
       if (send_counter_i(coord_mlo)>0) nrecvs = nrecvs - 1
-      allocate(ml2r_r_coltype(nrecvs))
-      allocate(ml2r_r_mtxtype(nrecvs))
       allocate(ml2r_r_type(nrecvs))
       allocate(ml2r_sources(nrecvs))
       
@@ -299,14 +286,19 @@ contains
             j = j + 1
             ml2r_sources(j) = icoord_mlo
             call MPI_Type_indexed(inblocks,blocklenghts(1:inblocks),&
-               recv_displacements(1:inblocks,icoord_mlo), MPI_DOUBLE_COMPLEX, ml2r_r_coltype(j), ierr)
+               recv_displacements(1:inblocks,icoord_mlo), MPI_DOUBLE_COMPLEX, col_type, ierr)
             
-            call MPI_Type_create_hvector(n_r_loc, 1, int(n_lm_loc*bytesCMPLX,kind=mpi_address_kind), &
-               ml2r_r_coltype(j), ml2r_r_mtxtype(j), ierr)
+            extend = int(n_lm_loc*bytesCMPLX,kind=mpi_address_kind)
+            call MPI_Type_create_resized(col_type, lb, extend, ext_type, ierr)
+            call MPI_Type_vector(n_r_loc, 1, 1, ext_type, mtx_type, ierr)
             
-            call MPI_Type_create_hvector(n_fields, 1, int(n_lm_loc*n_r_loc*bytesCMPLX,kind=mpi_address_kind), &
-               ml2r_r_mtxtype(j), ml2r_r_type(j), ierr)
+            extend = int(n_lm_loc*n_r_loc*bytesCMPLX,kind=mpi_address_kind)
+            call MPI_Type_create_resized(mtx_type, lb, extend, ml2r_r_type(j), ierr)
+            
             call MPI_Type_commit(ml2r_r_type(j),ierr)
+            call MPI_Type_free(col_type,ierr)
+            call MPI_Type_free(mtx_type,ierr)
+            call MPI_Type_free(ext_type,ierr)
          end if
       end do
       
@@ -317,8 +309,6 @@ contains
       ml2r_loc_dspl(:,1) = send_displacements(1:inblocks,coord_mlo) + 1
       ml2r_loc_dspl(:,2) = recv_displacements(1:inblocks,coord_mlo) + 1
       
-      deallocate(ml2r_s_coltype, ml2r_r_coltype)
-      deallocate(ml2r_s_mtxtype, ml2r_r_mtxtype)
    end subroutine initialize_ml2r_tranposition
    
    !----------------------------------------------------------------------------
@@ -348,7 +338,7 @@ contains
    !   Author: Rafael Lago (MPCDF) January 2018
    !   
       call initialize_ml2r_tranposition
-      ml2r_s = allocate_ml2r_transp(2)
+      ml2r_s = allocate_ml2r_transp()
    end subroutine initialize_communications_new
   
    subroutine initialize_communications
@@ -1981,20 +1971,20 @@ contains
          icoord_mlo = ml2r_dests(j)
          icoord_r = cart%mlo2lmr(icoord_mlo,2)
          il_r = dist_r(icoord_r,1)
-         call mpi_isend(container_ml(1,il_r,1), 1, ml2r_s_type(j), icoord_mlo, 1, comm_mlo, self%sends(j), ierr)
+         call mpi_isend(container_ml(1,il_r,1), n_fields, ml2r_s_type(j), icoord_mlo, 1, comm_mlo, self%sends(j), ierr)
       end do
       
       !-- Starts the receives
       do j=1,size(ml2r_sources)
          icoord_mlo = ml2r_sources(j)
-         call mpi_irecv(container_rm, 1, ml2r_r_type(j), icoord_mlo, 1, comm_mlo, self%recvs(j), ierr)
+         call mpi_irecv(container_rm, n_fields, ml2r_r_type(j), icoord_mlo, 1, comm_mlo, self%recvs(j), ierr)
       end do
       
       !-- Copies data which is already local
       do i=1,size(ml2r_loc_dspl,1)
          k = ml2r_loc_dspl(i,1)
          j = ml2r_loc_dspl(i,2)
-         container_rm(j,l_r:u_r,1:self%n_fields) = container_ml(k,l_r:u_r,1:self%n_fields)
+         container_rm(j,l_r:u_r,1:n_fields) = container_ml(k,l_r:u_r,1:n_fields)
       end do
       
    end subroutine transpose_ml2r_start
@@ -2183,13 +2173,34 @@ contains
       end do
       
    end subroutine transform_old2new
+!--------------------------------------------------------------------------------
+!@> Delete me after conversion!
+   subroutine test_field(newfield, oldfield, name)
+      character(len=*), intent(in) :: name
+      complex(cp), intent(in) :: newfield(n_mlo_loc,n_r_max)
+      complex(cp), intent(in) :: oldfield(llm:ulm,n_r_max)
+      complex(cp) :: test_old(llm:ulm,n_r_max)
+      complex(cp) :: test_new(n_mlo_loc,n_r_max)
+      real(cp)    :: test_norm, error_threshold
+      
+      error_threshold = 1000 !EPSILON(1.0)
+      
+      call transform_new2old(newfield, test_old)
+      test_norm = ABS(SUM(oldfield - test_old))
+      IF (test_norm>error_threshold) print *, "||",name,"n2o|| : ", test_norm
+
+      call transform_old2new(oldfield, test_new)
+      test_norm = ABS(SUM(newfield - test_new))
+      IF (test_norm>error_threshold) print *, "||",name,"o2n|| : ", test_norm
+   end subroutine
    
 !-------------------------------------------------------------------------------
-   subroutine printArray(inMat, o_fmtString)
+   subroutine printArray(inMat, o_prefix, o_fmtString)
       complex(cp), intent(in) :: inMat(:)
       character(*), optional, intent(in) :: o_fmtString
+      character(*), optional, intent(in) :: o_prefix
       
-      character(:), allocatable :: fmtString
+      character(:), allocatable :: fmtString, prefix
       integer :: nrow, irow
       
       if (present(o_fmtString)) then
@@ -2198,9 +2209,15 @@ contains
          fmtString = "(F)"
       end if
       
+      if (present(o_prefix)) then
+         prefix = o_prefix
+      else
+         prefix = ""
+      end if
+      
       nrow = size(inMat,1)
       
-      write(*,"(A)", advance="NO") "["
+      write(*,"(A)", advance="NO") prefix//"["
       do irow=1,nrow-1
          write(*,fmtString, advance="NO") real(inMat(irow))
          write(*,"(A)", advance="NO") "+"
@@ -2214,11 +2231,12 @@ contains
       flush(6)
    end subroutine printArray
 !-------------------------------------------------------------------------------
-   subroutine printArrayReal(inMat, o_fmtString)
+   subroutine printArrayReal(inMat, o_prefix, o_fmtString)
       real(cp), intent(in) :: inMat(:)
+      character(*), optional, intent(in) :: o_prefix
       character(*), optional, intent(in) :: o_fmtString
       
-      character(:), allocatable :: fmtString
+      character(:), allocatable :: fmtString, prefix
       integer :: nrow, irow
       
       if (present(o_fmtString)) then
@@ -2227,14 +2245,20 @@ contains
          fmtString = "(F)"
       end if
       
+      if (present(o_prefix)) then
+         prefix = o_prefix
+      else
+         prefix = ""
+      end if
+      
       nrow = size(inMat,1)
       
-      write(*,"(A)", advance="NO") "["
+      write(6,"(A)", advance="NO") prefix//"["
       do irow=1,nrow-1
-         write(*,fmtString, advance="NO") real(inMat(irow))
+         write(6,fmtString, advance="NO") real(inMat(irow))
       end do
-      write(*,fmtString, advance="NO") real(inMat(irow))
-      write(*,"(A)", advance="NO") "]"//NEW_LINE("A")
+      write(6,fmtString, advance="NO") real(inMat(irow))
+      write(6,"(A)", advance="NO") "]"//NEW_LINE("A")
       flush(6)
    end subroutine printArrayReal
 !-------------------------------------------------------------------------------

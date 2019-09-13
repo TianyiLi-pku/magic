@@ -1,32 +1,54 @@
+2019-09-10
+-------------------------------------------------------------------------------
+- [fixed] problem where matrices in updateS were being allocated for l_max
+  instead of for n_lo_loc.
+- updateWP done up to the computation of RHS and solution of linear system
+- Just a reminder: to compile with perflib, clean the build folder, 
+  uncomment the WITHPERF lines from CMakeList.txt and then call cmake as
+  cmake .. -DUSE_MPI=yes -DCMAKE_BUILD_TYPE=Release -DUSE_PRECOND=yes -DUSE_FFTLIB=MKL -DUSE_LAPACKLIB=MKL -DUSE_OMP=no -DUSE_SHTNS=yes
+
+
+2019-02-05
+-------------------------------------------------------------------------------
+- [BUG] in finalize_updateB. Something is wrong here and it will freeze 
+  the application, depending on the MPI ranks splitting. I commented the call
+  inside of finalize_LMLoop function to prevent this behaviour, but that's 
+  obviously not idea. Someone needs to look into that later.
+- [TODO] Parallelize legTFAS and similar functions. They are holding back 
+  several of the testsuite modules...
+
 2019-01-30
 -------------------------------------------------------------------------------
 - Found the bug in the transposition, and it was dumber than I could have 
   possibly imagined
 - Cleaned the code; added the ml2r_transp object to handle transpositions
-- [FIXED] a bug in geometry.f90:540
+- [fixed] a bug in geometry.f90:540
   (n_procs_r=4, n_procs_theta=8)
   - dynamo_benchmark
   - varProps
-  - finite_differences
-  - doubleDiffusion
   - precession
-  - testRestart
   - testTruncations
-  - testMapping
   - testRadialOutputs
   - hydro_bench_anel
   - isothermal_nrho3
   - dynamo_benchmark_condICrotIC
 - The following tests are now disabled:
+  ✘ finite_differences: uses lPowerCalc
+  ✘ boussBenchSat: uses lPowerCalc 
+  ✘ doubleDiffusion: uses lPowerCalc and updateXi (not yet parallelized)
+  ✘ testRestart: not sure, but it uses l_TO (not yet parallelized)
+  ✘ testMapping: not sure, but it uses l_TO (not yet parallelized)
+  ✘ testCoeffOutputs: diagnostics not parallelized
+  ✘ testOutputs: diagnostics not parallelized
+  ✘ testRMSOutputs: diagnostics not parallelized
+  ✘ testTOGeosOutputs: diagnostics not parallelized
+  ✘ testGraphMovieOutputs: diagnostics not parallelize
   ✘ fluxPerturbation: [BUG]; check entry of 2018-11-20 for more details
-  ✘ boussBenchSat: it uses lPowerCalc flag
-  ✘ varCond: it calls movie_gather_frames_to_rank0
-  ✘ couetteAxi: here m=0. It confuses my implementation. I need to 
-                rethink the distribution in this case, or force 
-                n_procs_theta=1.
+  ✘ varCond: uses movie_gather_frames_to_rank0 (not yet parallelized)
+  ✘ couetteAxi: m=0 and it confuses my implementation
   
   Command:
-  ./magic_wizard.py --use-mpi --use-mkl --use-shtns --mpicmd=srun --extracmd="n_procs_r=4 n_procs_theta=8" --nranks=32 --link --name="dynamo_benchmark, varProps, finite_differences, doubleDiffusion, precession, testRestart, testTruncations, testMapping, hydro_bench_anel, isothermal_nrho3, dynamo_benchmark_condICrotIC"
+  ./magic_wizard.py --use-mpi --use-mkl --use-shtns --mpicmd=srun --extracmd="n_procs_r=4 n_procs_theta=8" --nranks=32 --link --name="dynamo_benchmark, varProps, precession, testTruncations, hydro_bench_anel, isothermal_nrho3, dynamo_benchmark_condICrotIC"
   
 
 2019-01-14

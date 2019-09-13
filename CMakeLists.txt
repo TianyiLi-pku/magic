@@ -215,6 +215,13 @@ else()
    message(STATUS "Use SHTNS: no")
 endif()
 
+# add perflib
+# add_definitions(-DWITHPERF)
+# add_library(ooperf SHARED IMPORTED)
+# set_property(TARGET ooperf PROPERTY IMPORTED_LOCATION /mpcdf/soft/SLE_12_SP3/packages/haswell/perflib/intel_18_0_3/3.3/lib/libooperf.so)
+# include_directories(/mpcdf/soft/SLE_12_SP3/packages/haswell/perflib/intel_18_0_3/3.3/include/)
+# link_libraries(ooperf)
+
 # Final Fortran flags (after OpenMP/MPI to avoid the conflict
 set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} ${FFLAG_ARCH} ${FFLAG_STD} -g ${FFLAG_TRACEBACK} ${FFLAG_CONVERT} ${FFLAG_PREPROCESSOR}")
 

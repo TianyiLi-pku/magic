@@ -23,8 +23,8 @@ module LMLoop_mod
    use debugging,  only: debug_write
    use communications, only: GET_GLOBAL_SUM, lo2r_redist_start, lo2r_xi, &
        &                    lo2r_s, lo2r_flow, lo2r_field,               &
-       &                    lo2r_redist_start_dist, transform_new2old, transform_old2new, lo2r_redist_wait_dist, &
-       &                    ml2r_s
+       &                    lo2r_redist_start_dist, transform_new2old, transform_old2new, &
+       &                    lo2r_redist_wait_dist, ml2r_s, get_global_sum_dist, test_field
    use updateS_mod
    use updateZ_mod
    use updateWP_mod
@@ -90,7 +90,10 @@ contains
       if ( l_chemical_conv ) call finalize_updateXi
 
       call finalize_updateZ
-      if ( l_mag ) call finalize_updateB
+      ! There is a strange bug here! This finalize_updateB will
+      ! make MagIC freeze depending on the distribution of the MPI
+      ! ranks! Uncomment as soon as this problem is solved...
+!       if ( l_mag ) call finalize_updateB
 
    end subroutine finalize_LMLoop
 !----------------------------------------------------------------------------
@@ -136,7 +139,6 @@ contains
 
       !--- Local counter
       integer :: nLMB
-      integer :: lmStart,lmStop
       integer :: l,nR,ierr
       integer :: tStart(4),tStop(4),tPassed(4)
 
@@ -151,7 +153,7 @@ contains
       complex(cp) :: dzdtLast_lo_dist(llm:ulm,n_r_max)  ! Time derivative of z of previous step
       real(cp)    :: d_omega_ma_dtLast_dist             ! Time derivative of OC rotation of previous step
       real(cp)    :: d_omega_ic_dtLast_dist             ! Time derivative of IC rotation of previous step
-      complex(cp) :: dz_LMloc_dist(llm:ulm,n_r_max)   ! Radial derivative of z
+      complex(cp) :: dz_LMloc_dist(llm:ulm,n_r_max)     ! Radial derivative of z
       real(cp)    :: omega_ma_dist              ! Calculated OC rotation
       real(cp)    :: omega_ic_dist              ! Calculated IC rotation
       
@@ -163,10 +165,7 @@ contains
       complex(cp) :: dVSrLM_dist(n_mlo_loc,n_r_max)
       complex(cp) :: dsdt_dist(n_mlo_loc,n_r_max)
       
-      complex(cp) :: test_old(llm:ulm,n_r_max)
-      complex(cp) :: test_new(n_mlo_loc,n_r_max)
       real(cp)    :: test_norm, error_threshold, test_normi
-      
       integer :: nLMB_start, nLMB_end   
       integer :: m, lm, i, j, k
 
@@ -206,13 +205,20 @@ contains
             else
                lWPmat(l)=.false.
                lSmat(l) =.false.
-               lSmat_new(l) =.false.
             end if
             lZmat(l) =.false.
             if ( l_mag ) lBmat(l) =.false.
             if ( l_chemical_conv ) lXimat(l)=.false.
          end do
+         
+         ! NeEEEEEEEEEWWWWWWWWWW
+         if ( l_single_matrix ) then
+            continue
+         else
+            lSmat_new(:) =.false.
+         end if
       end if
+      
 
       !nThreadsLMmax = 1
       nLMB=1+coord_r
@@ -220,11 +226,6 @@ contains
       if ( lVerbose ) then
          write(*,'(/," ! lm block no:",i3)') nLMB
          call wallTime(tStart)
-      end if
-
-      if ( DEBUG_OUTPUT ) then
-         lmStart=lmStartB(nLMB)
-         lmStop =lmStopB(nLMB)
       end if
 
       if ( l_heat ) then ! dp,workA usead as work arrays
@@ -236,7 +237,7 @@ contains
                  & GET_GLOBAL_SUM( dsdtLast_LMloc(:,:) )
          end if
          if ( .not. l_single_matrix ) then
-            PERFON('up_S')
+! ! !             PERFON('up_S')
             if ( l_anelastic_liquid ) then
             
                print *, "Not Parallelized!", __LINE__, __FILE__
@@ -244,99 +245,72 @@ contains
                call updateS_ala(s_LMloc, ds_LMloc, w_LMloc, dVSrLM,dsdt,  & 
                     &           dsdtLast_LMloc, w1, coex, dt, nLMB)
             else
-
-            
+               
+               PERFON('par_old')
+               PERFON('upS_old')
                call updateS( s_LMloc, ds_LMloc, w_LMloc, dVSrLM,dsdt, &
                     &        dsdtLast_LMloc, w1, coex, dt, nLMB )
+               PERFOFF
+               PERFON('trp_old')
+               call lo2r_redist_start_dist(lo2r_s,s_LMloc_container,s_Rdist_test)
+               call lo2r_redist_wait_dist(lo2r_s)
+               PERFOFF
+               PERFOFF
                
+               PERFON('par_new')
+               PERFON('upS_new')
                call updateS_new( s_LMdist, ds_LMdist, w_LMdist, dVSrLM_dist, dsdt_dist, &
                     &             dsdtLast_LMdist, w1, coex, dt, nLMB )
-                    
-               error_threshold = 0.0
-               error_threshold = EPSILON(1.0_cp)
+               PERFOFF
+               PERFON('trp_new')
+               call ml2r_s%start(s_LMdist_container, s_Rdist_container, 2)
+               call ml2r_s%wait()
+               PERFOFF
+               PERFOFF
                
-               call transform_new2old(s_LMdist, test_old)
-               test_norm = ABS(SUM(s_LMloc - test_old))
-               IF (test_norm>error_threshold) print *, "|| s_new - s || : ", test_norm
-               
-               call transform_new2old(ds_LMdist, test_old)
-               test_norm = ABS(SUM(ds_LMloc - test_old))
-               IF (test_norm>error_threshold) print *, "|| ds_new - ds || : ", test_norm
-               
-               call transform_new2old(w_LMdist, test_old)
-               test_norm = ABS(SUM(w_LMloc - test_old))
-               IF (test_norm>error_threshold) print *, "|| w_new - w || : ", test_norm
-               
-               call transform_new2old(dsdt_dist, test_old)
-               test_norm = ABS(SUM(dsdt - test_old))
-               IF (test_norm>error_threshold) print *, "|| dsdt_dist - dsdt || : ", test_norm
-               
-               call transform_new2old(dsdtLast_LMdist, test_old)
-               test_norm = ABS(SUM(dsdtLast_LMloc - test_old))
-               IF (test_norm>error_threshold) print *, "|| dtLast_new - dtLast || : ", test_norm
-               
-               call transform_new2old(dVSrLM_dist, test_old)
-               test_norm = ABS(SUM(dVSrLM - test_old))
-               IF (test_norm>error_threshold) print *, "|| dVSrLM_dist - dVSrLM || : ", test_norm
-               
-               
-
-               call transform_old2new(s_LMloc, test_new)
-               test_norm = ABS(SUM(s_LMdist - test_new))
-               IF (test_norm>error_threshold) print *, "|| s_old - s || : ", test_norm
-               
-               call transform_old2new(ds_LMloc, test_new)
-               test_norm = ABS(SUM(ds_LMdist - test_new))
-               IF (test_norm>error_threshold) print *, "|| ds_old - ds || : ", test_norm
-               
-               call transform_old2new(w_LMloc, test_new)
-               test_norm = ABS(SUM(w_LMdist - test_new))
-               IF (test_norm>error_threshold) print *, "|| w_old - w || : ", test_norm
-               
-               call transform_old2new(dsdt, test_new)
-               test_norm = ABS(SUM(dsdt_dist - test_new))
-               IF (test_norm>error_threshold) print *, "|| dsdt_old  - dsdt || : ", test_norm
-               
-               call transform_old2new(dsdtLast_LMloc, test_new)
-               test_norm = ABS(SUM(dsdtLast_LMdist - test_new))
-               IF (test_norm>error_threshold) print *, "|| dtLast_old - dtLast || : ", test_norm
-               
-               call transform_old2new(dVSrLM, test_new)
-               test_norm = ABS(SUM(dVSrLM_dist - test_new))
-               IF (test_norm>error_threshold) print *, "|| dVSrLM_old - dVSrLM || : ", test_norm
-
+               call test_field(s_LMdist   , s_LMloc , "s")
+               call test_field(ds_LMdist  , ds_LMloc, "ds")
+               call test_field(w_LMdist   , w_LMloc , "w")
+               call test_field(dsdt_dist  , dsdt    , "dsdt")
+               call test_field(dVSrLM_dist, dVSrLM  , "dVSrLM")
+               call test_field(dsdtLast_LMdist, dsdtLast_LMloc, "dsdtLast")
             end if
-            PERFOFF
+! ! ! !             PERFOFF
             
 !             Here one could start the redistribution of s_LMloc,ds_LMloc etc. with a 
 !             nonblocking send
-            PERFON('rdstSst')
-            
+!             PERFON('rdstSst')
+
+!             PERFON('trp_old')
 !             call lo2r_redist_start_dist(lo2r_s,s_LMloc_container,s_Rdist_test)
-            call ml2r_s%start(s_LMdist_container, s_Rdist_container, 2)
-!             call ml2r_s%wait()
 !             call lo2r_redist_wait_dist(lo2r_s)
+!             PERFOFF
+            
+!             PERFON('trp_new')
+!             call ml2r_s%start(s_LMdist_container, s_Rdist_container, 2)
+!             call ml2r_s%wait()
+!             PERFOFF
 !             test_norm  = SUM(ABS(REAL(s_Rdist_test) - REAL(s_Rdist_container)))
 !             test_normi  = SUM(ABS(AIMAG(s_Rdist_test) - AIMAG(s_Rdist_container)))
 !             IF (test_norm+test_normi>error_threshold) print *, "|| cont || : ", test_norm + test_normi
             
-            !PERFOFF
+!             PERFOFF
          end if
 
          if ( DEBUG_OUTPUT ) then
             write(*,"(A,I2,4ES20.12)") "s_after : ",nLMB,  &
-                 & GET_GLOBAL_SUM( s_LMloc(:,:) ),         &
-                 & GET_GLOBAL_SUM( ds_LMloc(:,:) )
+                 & get_global_sum_dist( s_LMdist(:,:) ),         &
+                 & get_global_sum_dist( ds_LMdist(:,:) )
             write(*,"(A,I2,8ES22.14)") "s_after(bnd_r): ",nLMB, &
-                 & GET_GLOBAL_SUM( s_LMloc(:,n_r_icb) ),        &
-                 & GET_GLOBAL_SUM( s_LMloc(:,n_r_cmb) ),        &
-                 & GET_GLOBAL_SUM( ds_LMloc(:,n_r_icb) ),       &
-                 & GET_GLOBAL_SUM( ds_LMloc(:,n_r_cmb) )
+                 & get_global_sum_dist( s_LMdist(:,n_r_icb) ),        &
+                 & get_global_sum_dist( s_LMdist(:,n_r_cmb) ),        &
+                 & get_global_sum_dist( ds_LMdist(:,n_r_icb) ),       &
+                 & get_global_sum_dist( ds_LMdist(:,n_r_cmb) )
          end if
       end if
 
       if ( l_chemical_conv ) then ! dp,workA usead as work arrays
-         print *, "Not Parallelized, but continuing!!", __LINE__, __FILE__
+         print *, "l_chemical_conv not parallelized, but continuing!!", __LINE__, __FILE__
          call updateXi(xi_LMloc,dxi_LMloc,dVXirLM,dxidt,dxidtLast_LMloc, &
               &        w1,coex,dt,nLMB)
 
@@ -418,7 +392,7 @@ contains
             call lo2r_redist_start_dist(lo2r_s,s_LMloc_container,s_Rdist_container)
          else
             PERFON('up_WP')
-            call updateWP( w_LMloc, dw_LMloc, ddw_LMloc, dVxVhLM, dwdt,     &
+            call updateWP_new( w_LMloc, dw_LMloc, ddw_LMloc, dVxVhLM, dwdt,     &
                  &         dwdtLast_LMloc, p_LMloc, dp_LMloc, dpdt,         &
                  &         dpdtLast_LMloc, s_LMloc, xi_LMloc, w1, coex, dt, &
                  &         nLMB, lRmsNext, lPressNext)
@@ -478,8 +452,6 @@ contains
       if ( lVerbose ) then
          call wallTime(tStop)
          call subTime(tStart,tStop,tPassed)
-         !write(n_log_file,*) '! Thread no:',nTh
-         write(n_log_file,*) 'lmStart,lmStop:',lmStartB(nLMB),lmStopB(nLMB)
          call writeTime(n_log_file,'! Time for thread:',tPassed)
       end if
 
@@ -492,5 +464,7 @@ contains
       !LIKWID_OFF('LMloop')
       PERFOFF
    end subroutine LMLoop
+   
+   
 !--------------------------------------------------------------------------------
 end module LMLoop_mod
