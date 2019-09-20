@@ -375,11 +375,11 @@ contains
        
             !-- Transform f to cheb space:
             if ( l_dct_in_loc ) then
-               call r_scheme%costf1(work,n_f_max,n_f_start,n_f_stop)
+               call r_scheme%costf1(work(1:n_f_max,1:n_r_max),n_f_max,n_f_start,n_f_stop)
             end if
           
             !-- Get derivatives:
-            call get_dcheb(work,df,n_f_max,n_f_start,n_f_stop,n_r_max, &
+            call get_dcheb(work(1:n_f_max,1:n_r_max),df,n_f_max,n_f_start,n_f_stop,n_r_max, &
                  &         r_scheme%n_max,one)
           
             !-- Transform back:
@@ -493,7 +493,7 @@ contains
     
          !-- Transform f to cheb space:
          if ( l_dct_in_loc ) then
-            call r_scheme%costf1(work,n_f_max,n_f_start,n_f_stop)
+            call r_scheme%costf1(work(1:n_f_max,1:n_r_max),n_f_max,n_f_start,n_f_stop)
          end if
          !-- Get derivatives:
          call get_ddcheb(work(1:n_f_max,1:n_r_max),df,ddf,n_f_max,n_f_start,n_f_stop, &
@@ -612,11 +612,11 @@ contains
 
          !-- Transform f to cheb space:
          if ( l_dct_in_loc ) then
-            call r_scheme%costf1(work,n_f_max,n_f_start,n_f_stop)
+            call r_scheme%costf1(work(1:n_f_max,1:n_r_max),n_f_max,n_f_start,n_f_stop)
          end if
 
          !-- Get derivatives:
-         call get_dddcheb(work,df,ddf,dddf,n_f_max,n_f_start,n_f_stop,  &
+         call get_dddcheb(work(1:n_f_max,1:n_r_max),df,ddf,dddf,n_f_max,n_f_start,n_f_stop,  &
               &           n_r_max,r_scheme%n_max,one)
 
          !-- Transform back:

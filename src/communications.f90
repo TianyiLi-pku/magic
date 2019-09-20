@@ -2183,7 +2183,7 @@ contains
       complex(cp) :: test_new(n_mlo_loc,n_r_max)
       real(cp)    :: test_norm, error_threshold
       
-      error_threshold = 1000 !EPSILON(1.0)
+      error_threshold = 1e-6 !EPSILON(1.0)
       
       call transform_new2old(newfield, test_old)
       test_norm = ABS(SUM(oldfield - test_old))
@@ -2222,7 +2222,7 @@ contains
          write(*,fmtString, advance="NO") real(inMat(irow))
          write(*,"(A)", advance="NO") "+"
          write(*,fmtString, advance="NO") aimag(inMat(irow))
-         write(*,"(A)", advance="NO") "i, "
+         write(*,"(A)", advance="NO") "i "
       end do
       write(*,fmtString, advance="NO") real(inMat(irow))
       write(*,"(A)", advance="NO") "+"
@@ -2231,12 +2231,11 @@ contains
       flush(6)
    end subroutine printArray
 !-------------------------------------------------------------------------------
-   subroutine printArrayReal(inMat, o_prefix, o_fmtString)
+   subroutine printArrayReal(inMat, o_fmtString)
       real(cp), intent(in) :: inMat(:)
-      character(*), optional, intent(in) :: o_prefix
       character(*), optional, intent(in) :: o_fmtString
       
-      character(:), allocatable :: fmtString, prefix
+      character(:), allocatable :: fmtString
       integer :: nrow, irow
       
       if (present(o_fmtString)) then
@@ -2245,20 +2244,15 @@ contains
          fmtString = "(F)"
       end if
       
-      if (present(o_prefix)) then
-         prefix = o_prefix
-      else
-         prefix = ""
-      end if
+      nrow = size(inMat)
       
-      nrow = size(inMat,1)
-      
-      write(6,"(A)", advance="NO") prefix//"["
+      write(*,"(A)", advance="NO") "["
       do irow=1,nrow-1
-         write(6,fmtString, advance="NO") real(inMat(irow))
+         write(*,fmtString, advance="NO") real(inMat(irow))
+         write(*,"(A)", advance="NO") " "
       end do
-      write(6,fmtString, advance="NO") real(inMat(irow))
-      write(6,"(A)", advance="NO") "]"//NEW_LINE("A")
+      write(*,fmtString, advance="NO") real(inMat(irow))
+      write(*,"(A)", advance="NO") "]"//NEW_LINE("A")
       flush(6)
    end subroutine printArrayReal
 !-------------------------------------------------------------------------------
@@ -2284,7 +2278,7 @@ contains
             write(*,fmtString, advance="NO") real(inMat(irow,icol))
             write(*,"(A)", advance="NO") "+"
             write(*,fmtString, advance="NO") aimag(inMat(irow,icol))
-            write(*,"(A)", advance="NO") "i, "
+            write(*,"(A)", advance="NO") "i "
          end do
          write(*,fmtString, advance="NO") real(inMat(irow,ncol))
          write(*,"(A)", advance="NO") "+"
@@ -2314,13 +2308,41 @@ contains
          write(*,"(A)", advance="NO") "["
          do icol=1,ncol-1
             write(*,fmtString, advance="NO") inMat(irow,icol)
-            write(*,"(A)", advance="NO") ", "
+            write(*,"(A)", advance="NO") " "
          end do
          write(*,fmtString, advance="NO") inMat(irow,ncol)
          write(*,"(A)", advance="NO") "]"//NEW_LINE("A")
       end do
       flush(6)
    end subroutine printMatrixInt
+!-------------------------------------------------------------------------------
+   subroutine printMatrixReal(inMat, o_fmtString)
+      real(cp), intent(in) :: inMat(:,:)
+      character(*), optional, intent(in) :: o_fmtString
+      
+      character(:), allocatable :: fmtString
+      integer :: nrow, ncol, irow, icol
+      
+      if (present(o_fmtString)) then
+         fmtString = o_fmtString
+      else
+         fmtString = "(F00.0)"
+      end if
+      
+      nrow = size(inMat,1)
+      ncol = size(inMat,2)
+      
+      do irow=1,nrow
+         write(*,"(A)", advance="NO") "["
+         do icol=1,ncol-1
+            write(*,fmtString, advance="NO") inMat(irow,icol)
+            write(*,"(A)", advance="NO") " "
+         end do
+         write(*,fmtString, advance="NO") inMat(irow,ncol)
+         write(*,"(A)", advance="NO") "]"//NEW_LINE("A")
+      end do
+      flush(6)
+   end subroutine printMatrixReal
 !-------------------------------------------------------------------------------
    subroutine printTriplets(inMat)
       complex(cp), intent(in) :: inMat(:,:)

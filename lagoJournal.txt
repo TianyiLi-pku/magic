@@ -1,3 +1,15 @@
+2019-09-20
+-------------------------------------------------------------------------------
+- [FIXED] "bug" in get_dr and etc, where work variable is alloacated as
+  (1:ulm-llm+1,1:n_rmax) but used as (1:n_f_max,1:n_rmax). This confuses the 
+  code when using the new layout, but should be okay when using the old layout
+- converted most of updateWP, only the hInt2Pol functions are missing
+
+2019-09-17
+-------------------------------------------------------------------------------
+- updateWP done until the update of w, p and ddw. I reordered the rescaling of 
+  rhs by wpMat_fac to a more efficient version.
+
 2019-09-10
 -------------------------------------------------------------------------------
 - [fixed] problem where matrices in updateS were being allocated for l_max
