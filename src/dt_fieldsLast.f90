@@ -25,13 +25,17 @@ module fieldsLast
    complex(cp), public, allocatable :: dpdtLast_LMloc(:,:)
    complex(cp), public, allocatable :: dzdtLast_lo(:,:)
    complex(cp), public, allocatable :: dzdtLast_lodist(:,:)
-   complex(cp), public, allocatable :: dsdtLast_LMloc(:,:), dsdtLast_LMdist(:,:)
+   complex(cp), public, allocatable :: dsdtLast_LMloc(:,:)
    complex(cp), public, allocatable :: dxidtLast_LMloc(:,:)
  
    complex(cp), public, allocatable :: dbdtLast_LMloc(:,:)
    complex(cp), public, allocatable :: djdtLast_LMloc(:,:)
    complex(cp), public, allocatable :: dbdt_icLast_LMloc(:,:)
    complex(cp), public, allocatable :: djdt_icLast_LMloc(:,:)
+   
+   complex(cp), public, allocatable :: dsdtLast_LMdist(:,:)
+   complex(cp), public, allocatable :: dwdtLast_LMdist(:,:)
+   complex(cp), public, allocatable :: dpdtLast_LMdist(:,:)
 
    real(cp), public :: d_omega_ma_dtLast,d_omega_ic_dtLast
    real(cp), public :: lorentz_torque_maLast,lorentz_torque_icLast
@@ -49,6 +53,8 @@ contains
       allocate( dsdtLast_LMloc(llm:ulm,n_r_max) )
       
       !! [BEGIN NEW LAYOUT]
+      allocate( dwdtLast_LMdist(n_mlo_loc,n_r_max) )
+      allocate( dpdtLast_LMdist(n_mlo_loc,n_r_max) )
       allocate( dsdtLast_LMdist(n_mlo_loc,n_r_max) )
       !! [END NEW LAYOUT]
       
@@ -82,6 +88,7 @@ contains
       deallocate( dxidtLast_LMloc )
       
       deallocate( dsdtLast_LMdist )
+      deallocate( dwdtLast_LMdist, dpdtLast_LMdist)
 
    end subroutine finalize_fieldsLast
 !-------------------------------------------------------------------------------

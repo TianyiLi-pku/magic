@@ -149,12 +149,15 @@ contains
       complex(cp) :: sum_dwdt
       
       ! Duplicatas ------------------------------------------
-      real(cp)    :: d_omega_ma_dtLast_dist             ! Time derivative of OC rotation of previous step
-      real(cp)    :: d_omega_ic_dtLast_dist             ! Time derivative of IC rotation of previous step
+      real(cp)    :: d_omega_ma_dtLast_dist       ! Time derivative of OC rotation of previous step
+      real(cp)    :: d_omega_ic_dtLast_dist       ! Time derivative of IC rotation of previous step
       complex(cp) :: dzdt_dist(n_mlo_loc,n_r_max)
-      real(cp)    :: omega_ma_dist              ! Calculated OC rotation
-      real(cp)    :: omega_ic_dist              ! Calculated IC rotation
+      real(cp)    :: omega_ma_dist                ! Calculated OC rotation
+      real(cp)    :: omega_ic_dist                ! Calculated IC rotation
       
+      complex(cp) :: dVxVhLM_dist(n_mlo_loc,n_r_max)
+      complex(cp) :: dwdt_dist(n_mlo_loc,n_r_max) 
+      complex(cp) :: dpdt_dist(n_mlo_loc,n_r_max)
       
       !!! New layout  TMP
       !!!----------------------------------
@@ -337,32 +340,31 @@ contains
          d_omega_ic_dtLast_dist = d_omega_ic_dtLast
          
          ! dp, dVSrLM, workA used as work arrays
-         PERFON('upZ_old')
-         call updateZ( z_LMloc, dz_LMloc, dzdt, dzdtLast_lo, time, &
-              &        omega_ma,d_omega_ma_dtLast,                 &
-              &        omega_ic,d_omega_ic_dtLast,                 &
+!          PERFON('upZ_old')
+!          call updateZ( z_LMloc, dz_LMloc, dzdt, dzdtLast_lo, time, &
+!               &        omega_ma,d_omega_ma_dtLast,                 &
+!               &        omega_ic,d_omega_ic_dtLast,                 &
+!               &        lorentz_torque_ma,lorentz_torque_maLast,    &
+!               &        lorentz_torque_ic,lorentz_torque_icLast,    &
+!               &        w1,coex,dt,lRmsNext )
+!          PERFOFF
+         
+         PERFON('upZ_new')
+         call updateZ_new( z_LMdist, dz_LMdist, dzdt_dist, dzdtLast_lodist, time, &
+              &        omega_ma_dist,d_omega_ma_dtLast_dist,                 &
+              &        omega_ic_dist,d_omega_ic_dtLast_dist,                 &
               &        lorentz_torque_ma,lorentz_torque_maLast,    &
               &        lorentz_torque_ic,lorentz_torque_icLast,    &
-              &        w1,coex,dt,lRmsNext )
+              &        w1,coex,dt,lRmsNext ) 
          PERFOFF
          
-! ! ! ! ! ! ! ! ! !          PERFON('upZ_new')
-! ! ! ! ! ! ! ! ! !          call updateZ_new( z_LMdist, dz_LMdist, dzdt_dist, dzdtLast_lodist, time, &
-! ! ! ! ! ! ! ! ! !               &        omega_ma_dist,d_omega_ma_dtLast_dist,                 &
-! ! ! ! ! ! ! ! ! !               &        omega_ic_dist,d_omega_ic_dtLast_dist,                 &
-! ! ! ! ! ! ! ! ! !               &        lorentz_torque_ma,lorentz_torque_maLast,    &
-! ! ! ! ! ! ! ! ! !               &        lorentz_torque_ic,lorentz_torque_icLast,    &
-! ! ! ! ! ! ! ! ! !               &        w1,coex,dt,lRmsNext ) 
-! ! ! ! ! ! ! ! ! !          
-! ! ! ! ! ! ! ! ! !          PERFOFF
-! ! ! ! ! ! ! ! ! !          
-! ! ! ! ! ! ! ! ! !          call test_field(z_LMdist        , z_LMloc    , "z_")
-! ! ! ! ! ! ! ! ! !          call test_field(dz_LMdist       , dz_LMloc   , "dz_")
-! ! ! ! ! ! ! ! ! !          call test_field(dzdtLast_lodist, dzdtLast_lo, "dzdtLast_lo_")
-! ! ! ! ! ! ! ! ! !          
-! ! ! ! ! ! ! ! ! !          call transform_new2old(z_LMdist, z_LMloc)
-! ! ! ! ! ! ! ! ! !          call transform_new2old(dz_LMdist, dz_LMloc)
-! ! ! ! ! ! ! ! ! !          call transform_new2old(dzdtLast_lodist,dzdtLast_lo)
+         call test_field(z_LMdist        , z_LMloc    , "z_")
+         call test_field(dz_LMdist       , dz_LMloc   , "dz_")
+         call test_field(dzdtLast_lodist, dzdtLast_lo, "dzdtLast_lo_")
+         
+         call transform_new2old(z_LMdist, z_LMloc)
+         call transform_new2old(dz_LMdist, dz_LMloc)
+         call transform_new2old(dzdtLast_lodist,dzdtLast_lo)
               
 
          !call MPI_Barrier(comm_r,ierr)
@@ -411,16 +413,59 @@ contains
 
             call lo2r_redist_start_dist(lo2r_s,s_LMloc_container,s_Rdist_container)
          else
-            PERFON('up_WP')
-            call updateWP_new( w_LMloc, dw_LMloc, ddw_LMloc, dVxVhLM, dwdt,     &
-                 &         dwdtLast_LMloc, p_LMloc, dp_LMloc, dpdt,         &
-                 &         dpdtLast_LMloc, s_LMloc, xi_LMloc, w1, coex, dt, &
-                 &         nLMB, lRmsNext, lPressNext)
-! ! !             call updateWP( w_LMloc, dw_LMloc, ddw_LMloc, dVxVhLM, dwdt,     &
-! ! !                  &         dwdtLast_LMloc, p_LMloc, dp_LMloc, dpdt,         &
-! ! !                  &         dpdtLast_LMloc, s_LMloc, xi_LMloc, w1, coex, dt, &
-! ! !                  &         nLMB, lRmsNext, lPressNext)
+            dVxVhLM_dist = 0.0
+            call transform_old2new( w_LMloc       , w_LMdist        )
+            call transform_old2new( dw_LMloc      , dw_LMdist       )
+            call transform_old2new( ddw_LMloc     , ddw_LMdist      )
+            call transform_old2new( dwdt          , dwdt_dist       )    !
+            call transform_old2new( dwdtLast_LMloc, dwdtLast_LMdist )    !
+            call transform_old2new( p_LMloc       , p_LMdist        )
+            call transform_old2new( dp_LMloc      , dp_LMdist       )
+            call transform_old2new( dpdt          , dpdt_dist       )    !
+            call transform_old2new( dpdtLast_LMloc, dpdtLast_LMdist )    !
+            call transform_old2new( s_LMloc       , s_LMdist        )
+            if (l_double_curl)   call transform_old2new( dVxVhLM       , dVxVhLM_dist    )    !
+            if (l_chemical_conv) call transform_old2new( xi_LMloc      , xi_LMdist       )
+            
+            PERFON('upWP_new')
+            call updateWP_new( w_LMdist, dw_LMdist, ddw_LMdist, dVxVhLM_dist, dwdt_dist,     &
+                 &         dwdtLast_LMdist, p_LMdist, dp_LMdist, dpdt_dist,         &
+                 &         dpdtLast_LMdist, s_LMdist, xi_LMdist, w1, coex, dt, &
+                 &         lRmsNext, lPressNext)
             PERFOFF
+                 
+                 
+!             PERFON('upWP_old')
+!             call updateWP( w_LMloc, dw_LMloc, ddw_LMloc, dVxVhLM, dwdt,     &
+!                  &         dwdtLast_LMloc, p_LMloc, dp_LMloc, dpdt,         &
+!                  &         dpdtLast_LMloc, s_LMloc, xi_LMloc, w1, coex, dt, &
+!                  &         nLMB, lRmsNext, lPressNext)
+!             PERFOFF
+
+            call transform_new2old( w_LMdist        , w_LMloc       )
+            call transform_new2old( dw_LMdist       , dw_LMloc      )
+            call transform_new2old( ddw_LMdist      , ddw_LMloc     )
+            call transform_new2old( dwdt_dist       , dwdt          )    !
+            call transform_new2old( dwdtLast_LMdist , dwdtLast_LMloc)    !
+            call transform_new2old( p_LMdist        , p_LMloc       )
+            call transform_new2old( dp_LMdist       , dp_LMloc      )
+            call transform_new2old( dpdtLast_LMdist , dpdtLast_LMloc)    !
+            call transform_new2old( s_LMdist        , s_LMloc       )
+            if (l_double_curl)   call transform_new2old( dVxVhLM_dist, dVxVhLM)    !
+            if (l_chemical_conv) call transform_new2old( xi_LMdist   , xi_LMloc )
+            
+            call test_field(w_LMdist       , w_LMloc       , "w_")
+            call test_field(dw_LMdist      , dw_LMloc      , "dw_")
+            call test_field(ddw_LMdist     , ddw_LMloc     , "ddw_")
+            call test_field(dwdt_dist      , dwdt          , "dwdt_")
+            call test_field(dwdtLast_LMdist, dwdtLast_LMloc, "dwdtLast_")
+            call test_field(p_LMdist       , p_LMloc       , "p_")
+            call test_field(dp_LMdist      , dp_LMloc      , "dp_")
+            call test_field(dpdtLast_LMdist, dpdtLast_LMloc, "dpdtLast_")
+            call test_field(s_LMdist       , s_LMloc       , "s_")
+            if (l_double_curl)   call test_field(dVxVhLM_dist   , dVxVhLM       , "dVxVhLM_")
+            if (l_chemical_conv) call test_field(xi_LMdist      , xi_LMloc      , "xi_")
+            
 
             if ( DEBUG_OUTPUT ) then
                write(*,"(A,I2,12ES22.14)") "wp_after: ",nLMB,  &

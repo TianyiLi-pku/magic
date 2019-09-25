@@ -16,10 +16,12 @@ module fields
    private
  
    !-- Velocity potentials:
-   complex(cp), public, allocatable, target :: flow_LMloc_container(:,:,:), flow_LMdist_container(:,:,:)
+   complex(cp), public, allocatable, target :: flow_LMloc_container(:,:,:)
+   complex(cp), public, pointer :: w_LMloc(:,:),dw_LMloc(:,:),ddw_LMloc(:,:)
    complex(cp), public, allocatable, target :: flow_Rdist_container(:,:,:)
-   complex(cp), public, pointer :: w_LMloc(:,:),dw_LMloc(:,:),ddw_LMloc(:,:), w_LMdist(:,:)
    complex(cp), public, pointer :: w_Rdist(:,:), dw_Rdist(:,:), ddw_Rdist(:,:)
+   complex(cp), public, allocatable, target :: flow_LMdist_container(:,:,:)
+   complex(cp), public, pointer :: w_LMdist(:,:),dw_LMdist(:,:),ddw_LMdist(:,:)
  
    complex(cp), public, pointer :: z_LMloc(:,:),dz_LMloc(:,:), z_LMdist(:,:),dz_LMdist(:,:)
    complex(cp), public, pointer :: z_Rdist(:,:), dz_Rdist(:,:)
@@ -32,14 +34,16 @@ module fields
    complex(cp), public, pointer :: s_Rdist(:,:), ds_Rdist(:,:)
  
    !-- Chemical composition:
-   complex(cp), public, allocatable, target :: xi_LMloc_container(:,:,:)
+   complex(cp), public, allocatable, target :: xi_LMloc_container(:,:,:), xi_LMdist_container(:,:,:)
    complex(cp), public, allocatable, target :: xi_Rdist_container(:,:,:)
    complex(cp), public, pointer :: xi_LMloc(:,:), dxi_LMloc(:,:)
+   complex(cp), public, pointer :: xi_LMdist(:,:), dxi_LMdist(:,:)
    complex(cp), public, pointer :: xi_Rdist(:,:), dxi_Rdist(:,:)
 
    !-- Pressure:
    complex(cp), public, pointer :: p_LMloc(:,:), dp_LMloc(:,:)
    complex(cp), public, pointer :: p_Rdist(:,:), dp_Rdist(:,:)
+   complex(cp), public, pointer :: p_LMdist(:,:), dp_LMdist(:,:)
  
    !-- Magnetic field potentials:
    complex(cp), public, allocatable :: b(:,:)
@@ -140,14 +144,14 @@ contains
       
       allocate( s_Rdist_test(n_lm_loc,l_r:u_r,1:2) )  !DELETEME
       
-      allocate( flow_LMdist_container(n_mlo_loc,n_r_max,1:2) )
-!       w_LMloc(llm:ulm,1:n_r_max)   => flow_LMloc_container(:,:,1)
-!       dw_LMloc(llm:ulm,1:n_r_max)  => flow_LMloc_container(:,:,2)
-!       ddw_LMloc(llm:ulm,1:n_r_max) => flow_LMloc_container(:,:,3)
-      z_LMdist(1:n_mlo_loc,1:n_r_max)   => flow_LMdist_container(:,:,1)
-      dz_LMdist(1:n_mlo_loc,1:n_r_max)  => flow_LMdist_container(:,:,2)
-      
-      
+      allocate( flow_LMdist_container(n_mlo_loc,n_r_max,1:7) )
+      w_LMdist(1:n_mlo_loc,1:n_r_max)   => flow_LMdist_container(:,:,1)
+      dw_LMdist(1:n_mlo_loc,1:n_r_max)  => flow_LMdist_container(:,:,2)
+      ddw_LMdist(1:n_mlo_loc,1:n_r_max) => flow_LMdist_container(:,:,3)
+      z_LMdist(1:n_mlo_loc,1:n_r_max)   => flow_LMdist_container(:,:,4)
+      dz_LMdist(1:n_mlo_loc,1:n_r_max)  => flow_LMdist_container(:,:,5)
+      p_LMdist(1:n_mlo_loc,1:n_r_max)   => flow_LMdist_container(:,:,6)
+      dp_LMdist(1:n_mlo_loc,1:n_r_max)  => flow_LMdist_container(:,:,7)
       !!! [END NEW LAYOUT]
       
       bytes_allocated = bytes_allocated + &
@@ -167,6 +171,12 @@ contains
                            2*(ulm-llm+1)*n_r_max*SIZEOF_DEF_COMPLEX
          bytes_allocated = bytes_allocated + &
                            2*n_lm_loc*(u_r-l_r+1)*SIZEOF_DEF_COMPLEX
+                           
+         !!! [NEW LAYOUT]
+         allocate( xi_LMdist_container(n_mlo_loc,n_r_max,1:2) )
+         xi_LMdist(1:n_mlo_loc,1:n_r_max)  => xi_LMdist_container(:,:,1)
+         dxi_LMdist(1:n_mlo_loc,1:n_r_max) => xi_LMdist_container(:,:,2)
+         !!! [END NEW LAYOUT]
       else
          allocate( xi_LMloc_container(1,1,2) ) ! For debugging
          xi_LMloc(1:1,1:1)  => xi_LMloc_container(:,:,1)
@@ -174,6 +184,12 @@ contains
          allocate( xi_Rdist_container(1,1,2) )
          xi_Rdist(1:1,1:1)   => xi_Rdist_container(:,:,1)
          dxi_Rdist(1:1,1:1)  => xi_Rdist_container(:,:,2)
+         
+          !!! [NEW LAYOUT]
+         allocate( xi_LMdist_container(1,1,1:2) )
+         xi_LMdist(1:1,1:1)  => xi_LMdist_container(:,:,1)
+         dxi_LMdist(1:1,1:1) => xi_LMdist_container(:,:,2)
+         !!! [END NEW LAYOUT]
       end if
 
       !-- Magnetic field potentials:

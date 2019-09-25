@@ -412,15 +412,10 @@ contains
       integer  :: l, m, lm, nR, i, lj, mi, nRHS, m0lj
       real(cp) ::  rhs(n_r_max) ! real RHS for l=m=0
 
-
-      integer :: threadid,nThreads,iThread,all_lms,per_thread,start_lm,stop_lm
-      integer :: iChunk,nChunks,size_of_last_chunk,lmB0
-
       if ( .not. l_update_s ) return
 
       w2  =one-w1
       O_dt=one/dt
-
 
       !-- Get radial derivatives of s: work_LMloc,dsdtLast used as work arrays
       call get_dr( dVSrLM, work_LMdist, n_mlo_loc,1,n_mlo_loc,n_r_max,rscheme_oc, nocopy=.true. )
