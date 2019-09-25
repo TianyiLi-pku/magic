@@ -24,6 +24,7 @@ module fieldsLast
    complex(cp), public, allocatable :: dwdtLast_LMloc(:,:)
    complex(cp), public, allocatable :: dpdtLast_LMloc(:,:)
    complex(cp), public, allocatable :: dzdtLast_lo(:,:)
+   complex(cp), public, allocatable :: dzdtLast_lodist(:,:)
    complex(cp), public, allocatable :: dsdtLast_LMloc(:,:), dsdtLast_LMdist(:,:)
    complex(cp), public, allocatable :: dxidtLast_LMloc(:,:)
  
@@ -44,6 +45,7 @@ contains
       allocate( dwdtLast_LMloc(llm:ulm,n_r_max) )
       allocate( dpdtLast_LMloc(llm:ulm,n_r_max) )
       allocate( dzdtLast_lo(llm:ulm,n_r_max) )
+      allocate( dzdtLast_lodist(n_mlo_loc,n_r_max) )
       allocate( dsdtLast_LMloc(llm:ulm,n_r_max) )
       
       !! [BEGIN NEW LAYOUT]

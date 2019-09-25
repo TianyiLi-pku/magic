@@ -149,11 +149,9 @@ contains
       complex(cp) :: sum_dwdt
       
       ! Duplicatas ------------------------------------------
-      complex(cp) :: z_LMloc_dist(llm:ulm,n_r_max)      ! Toroidal velocity potential z
-      complex(cp) :: dzdtLast_lo_dist(llm:ulm,n_r_max)  ! Time derivative of z of previous step
       real(cp)    :: d_omega_ma_dtLast_dist             ! Time derivative of OC rotation of previous step
       real(cp)    :: d_omega_ic_dtLast_dist             ! Time derivative of IC rotation of previous step
-      complex(cp) :: dz_LMloc_dist(llm:ulm,n_r_max)     ! Radial derivative of z
+      complex(cp) :: dzdt_dist(n_mlo_loc,n_r_max)
       real(cp)    :: omega_ma_dist              ! Calculated OC rotation
       real(cp)    :: omega_ic_dist              ! Calculated IC rotation
       
@@ -313,7 +311,6 @@ contains
       end if
 
       if ( l_chemical_conv ) then ! dp,workA usead as work arrays
-         print *, "l_chemical_conv not parallelized, but continuing!!", __LINE__, __FILE__
          call updateXi(xi_LMloc,dxi_LMloc,dVXirLM,dxidt,dxidtLast_LMloc, &
               &        w1,coex,dt,nLMB)
 
@@ -328,25 +325,45 @@ contains
                  & GET_GLOBAL_SUM( dzdtLast_lo(:,:) )
          end if
          
-         PERFON('up_Z')
          
-         z_LMloc_dist = z_LMloc
-         dz_LMloc_dist = dz_LMloc
-         dzdtLast_lo_dist = dzdtLast_lo
+         call transform_old2new(z_LMloc, z_LMdist)
+         call transform_old2new(dz_LMloc, dz_LMdist)
+         call transform_old2new(dzdt, dzdt_dist)
+         call transform_old2new(dzdtLast_lo, dzdtLast_lodist)
+
          omega_ma_dist = omega_ma
          omega_ic_dist = omega_ic
          d_omega_ma_dtLast_dist = d_omega_ma_dtLast
          d_omega_ic_dtLast_dist = d_omega_ic_dtLast
          
          ! dp, dVSrLM, workA used as work arrays
-         call updateZ_new( z_LMloc, dz_LMloc, dzdt, dzdtLast_lo, time, &
+         PERFON('upZ_old')
+         call updateZ( z_LMloc, dz_LMloc, dzdt, dzdtLast_lo, time, &
               &        omega_ma,d_omega_ma_dtLast,                 &
               &        omega_ic,d_omega_ic_dtLast,                 &
               &        lorentz_torque_ma,lorentz_torque_maLast,    &
               &        lorentz_torque_ic,lorentz_torque_icLast,    &
               &        w1,coex,dt,lRmsNext )
-              
          PERFOFF
+         
+! ! ! ! ! ! ! ! ! !          PERFON('upZ_new')
+! ! ! ! ! ! ! ! ! !          call updateZ_new( z_LMdist, dz_LMdist, dzdt_dist, dzdtLast_lodist, time, &
+! ! ! ! ! ! ! ! ! !               &        omega_ma_dist,d_omega_ma_dtLast_dist,                 &
+! ! ! ! ! ! ! ! ! !               &        omega_ic_dist,d_omega_ic_dtLast_dist,                 &
+! ! ! ! ! ! ! ! ! !               &        lorentz_torque_ma,lorentz_torque_maLast,    &
+! ! ! ! ! ! ! ! ! !               &        lorentz_torque_ic,lorentz_torque_icLast,    &
+! ! ! ! ! ! ! ! ! !               &        w1,coex,dt,lRmsNext ) 
+! ! ! ! ! ! ! ! ! !          
+! ! ! ! ! ! ! ! ! !          PERFOFF
+! ! ! ! ! ! ! ! ! !          
+! ! ! ! ! ! ! ! ! !          call test_field(z_LMdist        , z_LMloc    , "z_")
+! ! ! ! ! ! ! ! ! !          call test_field(dz_LMdist       , dz_LMloc   , "dz_")
+! ! ! ! ! ! ! ! ! !          call test_field(dzdtLast_lodist, dzdtLast_lo, "dzdtLast_lo_")
+! ! ! ! ! ! ! ! ! !          
+! ! ! ! ! ! ! ! ! !          call transform_new2old(z_LMdist, z_LMloc)
+! ! ! ! ! ! ! ! ! !          call transform_new2old(dz_LMdist, dz_LMloc)
+! ! ! ! ! ! ! ! ! !          call transform_new2old(dzdtLast_lodist,dzdtLast_lo)
+              
 
          !call MPI_Barrier(comm_r,ierr)
 
@@ -395,14 +412,14 @@ contains
             call lo2r_redist_start_dist(lo2r_s,s_LMloc_container,s_Rdist_container)
          else
             PERFON('up_WP')
-! ! !             call updateWP_new( w_LMloc, dw_LMloc, ddw_LMloc, dVxVhLM, dwdt,     &
-! ! !                  &         dwdtLast_LMloc, p_LMloc, dp_LMloc, dpdt,         &
-! ! !                  &         dpdtLast_LMloc, s_LMloc, xi_LMloc, w1, coex, dt, &
-! ! !                  &         nLMB, lRmsNext, lPressNext)
-            call updateWP( w_LMloc, dw_LMloc, ddw_LMloc, dVxVhLM, dwdt,     &
+            call updateWP_new( w_LMloc, dw_LMloc, ddw_LMloc, dVxVhLM, dwdt,     &
                  &         dwdtLast_LMloc, p_LMloc, dp_LMloc, dpdt,         &
                  &         dpdtLast_LMloc, s_LMloc, xi_LMloc, w1, coex, dt, &
                  &         nLMB, lRmsNext, lPressNext)
+! ! !             call updateWP( w_LMloc, dw_LMloc, ddw_LMloc, dVxVhLM, dwdt,     &
+! ! !                  &         dwdtLast_LMloc, p_LMloc, dp_LMloc, dpdt,         &
+! ! !                  &         dpdtLast_LMloc, s_LMloc, xi_LMloc, w1, coex, dt, &
+! ! !                  &         nLMB, lRmsNext, lPressNext)
             PERFOFF
 
             if ( DEBUG_OUTPUT ) then

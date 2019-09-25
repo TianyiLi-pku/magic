@@ -2183,7 +2183,7 @@ contains
       complex(cp) :: test_new(n_mlo_loc,n_r_max)
       real(cp)    :: test_norm, error_threshold
       
-      error_threshold = EPSILON(1.0_cp)
+      error_threshold = 1e-6! EPSILON(1.0_cp)
       
       call transform_new2old(newfield, test_old)
       test_norm = ABS(SUM(oldfield - test_old))
