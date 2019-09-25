@@ -215,7 +215,10 @@ contains
          if ( l_single_matrix ) then
             continue
          else
+            lZ10mat_new = .false.
             lSmat_new(:) =.false.
+            lZmat_new(:) =.false.
+            lWPmat_new(:)=.false.
          end if
       end if
       
@@ -260,7 +263,7 @@ contains
                PERFON('par_new')
                PERFON('upS_new')
                call updateS_new( s_LMdist, ds_LMdist, w_LMdist, dVSrLM_dist, dsdt_dist, &
-                    &             dsdtLast_LMdist, w1, coex, dt, nLMB )
+                    &             dsdtLast_LMdist, w1, coex, dt )
                PERFOFF
                PERFON('trp_new')
                call ml2r_s%start(s_LMdist_container, s_Rdist_container, 2)
@@ -316,7 +319,7 @@ contains
 
          call lo2r_redist_start_dist(lo2r_xi,xi_LMloc_container,xi_Rdist_container)
       end if
-
+      
       if ( l_conv ) then
          if ( DEBUG_OUTPUT ) then
             write(*,"(A,I2,6ES20.12)") "z_before: ",nLMB,   &
@@ -336,7 +339,7 @@ contains
          d_omega_ic_dtLast_dist = d_omega_ic_dtLast
          
          ! dp, dVSrLM, workA used as work arrays
-         call updateZ( z_LMloc, dz_LMloc, dzdt, dzdtLast_lo, time, &
+         call updateZ_new( z_LMloc, dz_LMloc, dzdt, dzdtLast_lo, time, &
               &        omega_ma,d_omega_ma_dtLast,                 &
               &        omega_ic,d_omega_ic_dtLast,                 &
               &        lorentz_torque_ma,lorentz_torque_maLast,    &
@@ -392,7 +395,11 @@ contains
             call lo2r_redist_start_dist(lo2r_s,s_LMloc_container,s_Rdist_container)
          else
             PERFON('up_WP')
-            call updateWP_new( w_LMloc, dw_LMloc, ddw_LMloc, dVxVhLM, dwdt,     &
+! ! !             call updateWP_new( w_LMloc, dw_LMloc, ddw_LMloc, dVxVhLM, dwdt,     &
+! ! !                  &         dwdtLast_LMloc, p_LMloc, dp_LMloc, dpdt,         &
+! ! !                  &         dpdtLast_LMloc, s_LMloc, xi_LMloc, w1, coex, dt, &
+! ! !                  &         nLMB, lRmsNext, lPressNext)
+            call updateWP( w_LMloc, dw_LMloc, ddw_LMloc, dVxVhLM, dwdt,     &
                  &         dwdtLast_LMloc, p_LMloc, dp_LMloc, dpdt,         &
                  &         dpdtLast_LMloc, s_LMloc, xi_LMloc, w1, coex, dt, &
                  &         nLMB, lRmsNext, lPressNext)

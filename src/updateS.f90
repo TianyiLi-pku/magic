@@ -386,7 +386,7 @@ contains
    end subroutine updateS
    
 !------------------------------------------------------------------------------
-   subroutine updateS_new(s,ds,w,dVSrLM,dsdt,dsdtLast,w1,coex,dt,nLMB)
+   subroutine updateS_new(s,ds,w,dVSrLM,dsdt,dsdtLast,w1,coex,dt)
       !
       !  updates the entropy field s and its radial derivatives
       !  adds explicit part to time derivatives of s
@@ -396,7 +396,6 @@ contains
       real(cp),    intent(in) :: w1        ! weight for time step !
       real(cp),    intent(in) :: coex      ! factor depending on alpha
       real(cp),    intent(in) :: dt        ! time step
-      integer,     intent(in) :: nLMB
       complex(cp), intent(in) :: w(n_mlo_loc,n_r_max)
       complex(cp), intent(inout) :: dVSrLM(n_mlo_loc,n_r_max)
 
@@ -410,7 +409,7 @@ contains
       !-- Local variables:
       real(cp) :: w2            ! weight of second time step
       real(cp) :: O_dt
-      integer  :: l, m, lm, r, i, lj, mi, nRHS, m0lj
+      integer  :: l, m, lm, nR, i, lj, mi, nRHS, m0lj
       real(cp) ::  rhs(n_r_max) ! real RHS for l=m=0
 
 
@@ -425,11 +424,11 @@ contains
 
       !-- Get radial derivatives of s: work_LMloc,dsdtLast used as work arrays
       call get_dr( dVSrLM, work_LMdist, n_mlo_loc,1,n_mlo_loc,n_r_max,rscheme_oc, nocopy=.true. )
-      do r=1,n_r_max
+      do nR=1,n_r_max
          do i=1,n_mlo_loc
-            dsdt(i,r)=orho1(r)*(dsdt(i,r)-or2(r)*work_LMdist(i,r)- &
-            &           dLh(map_mlo%i2ml(i))*or2(r)*       &
-            &           dentropy0(r)*w(i,r))
+            dsdt(i,nR)=orho1(nR)*(dsdt(i,nR)-or2(nR)*work_LMdist(i,nR)- &
+            &           dLh(map_mlo%i2ml(i))*or2(nR)*       &
+            &           dentropy0(nR)*w(i,nR))
          end do
       end do
 
@@ -469,9 +468,9 @@ contains
             if ( l == 0 ) then
                rhs(1)=      real(tops(0,0))
                rhs(n_r_max)=real(bots(0,0))
-               do r=2,n_r_max-1
-                  rhs(r)=real(s(i,r))*O_dt+w1*real(dsdt(i,r))  + &
-                  &       w2*real(dsdtLast(i,r))
+               do nR=2,n_r_max-1
+                  rhs(nR)=real(s(i,nR))*O_dt+w1*real(dsdt(i,nR))  + &
+                  &       w2*real(dsdtLast(i,nR))
                end do
 
 #ifdef WITH_PRECOND_S0
@@ -486,11 +485,11 @@ contains
                rhs1_new(1,mi)=      sMat_fac_new(1,lj)*rhs1_new(1,mi)
                rhs1_new(n_r_max,mi)=sMat_fac_new(1,lj)*rhs1_new(n_r_max,mi)
 #endif
-               do r=2,n_r_max-1
-                  rhs1_new(r,mi)=s(i,r)*O_dt+w1*dsdt(i,r)  &
-                  &                     +w2*dsdtLast(i,r)
+               do nR=2,n_r_max-1
+                  rhs1_new(nR,mi)=s(i,nR)*O_dt+w1*dsdt(i,nR)  &
+                  &                     +w2*dsdtLast(i,nR)
 #ifdef WITH_PRECOND_S
-                  rhs1_new(r,mi) = sMat_fac_new(r,lj)*rhs1_new(r,mi)
+                  rhs1_new(nR,mi) = sMat_fac_new(nR,lj)*rhs1_new(nR,mi)
 #endif
                end do
             end if
@@ -515,17 +514,17 @@ contains
             !@> TODO: place this l==0 into the previous l==0 and do this mi loop inside 
             !@> of the "solve_mat" loop
             if ( l == 0 ) then
-               do r=1,rscheme_oc%n_max
-                  s(m0lj+mi,r)=rhs(r)
+               do nR=1,rscheme_oc%n_max
+                  s(m0lj+mi,nR)=rhs(nR)
                end do
             else
                if ( m > 0 ) then
-                  do r=1,rscheme_oc%n_max
-                     s(m0lj+mi,r)=rhs1_new(r,mi)
+                  do nR=1,rscheme_oc%n_max
+                     s(m0lj+mi,nR)=rhs1_new(nR,mi)
                   end do
                else
-                  do r=1,rscheme_oc%n_max
-                     s(m0lj+mi,r)= cmplx(real(rhs1_new(r,mi)), 0.0_cp,kind=cp)
+                  do nR=1,rscheme_oc%n_max
+                     s(m0lj+mi,nR)= cmplx(real(rhs1_new(nR,mi)), 0.0_cp,kind=cp)
                   end do
                end if
             end if
@@ -540,18 +539,18 @@ contains
       call rscheme_oc%costf1(s,n_mlo_loc,1,n_mlo_loc)
 
       !-- Calculate explicit time step part:
-      do r=n_r_cmb+1,n_r_icb-1
+      do nR=n_r_cmb+1,n_r_icb-1
          do i=1, n_mlo_loc
             l  = map_mlo%i2l(i)
             m  = map_mlo%i2m(i)
             lm = map_glbl_st%lm2(l,m)
-            dsdtLast(i,r)=                         dsdt(i,r) &
+            dsdtLast(i,nR)=                         dsdt(i,nR) &
             &                        - coex*opr*hdif_S(lm) * &
-            &               kappa(r) * ( work_LMdist(i,r) &
-            & + ( beta(r)+dLtemp0(r)+two*or1(r)+dLkappa(r) ) &
-            &                                      * ds(i,r) &
-            &                               - dLh(lm)*or2(r) &
-            &                                      *  s(i,r) )
+            &               kappa(nR) * ( work_LMdist(i,nR) &
+            & + ( beta(nR)+dLtemp0(nR)+two*or1(nR)+dLkappa(nR) ) &
+            &                                      * ds(i,nR) &
+            &                               - dLh(lm)*or2(nR) &
+            &                                      *  s(i,nR) )
          end do
       end do
 

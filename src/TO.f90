@@ -6,7 +6,7 @@ module torsional_oscillations
    use precision_mod
    use mem_alloc, only: bytes_allocated
    use geometry, only: nrp, n_phi_maxStr, n_r_maxStr, l_max, &
-       &                 n_theta_maxStr, n_r_cmb, l_r, u_r
+       &                 n_theta_maxStr, n_r_cmb, l_r, u_r, n_lo_loc
    use LMLoop_data, only: llmMag, ulmMag
    use radial_functions, only: r, or1, or2, or3, or4, beta, orho1, dbeta
    use physical_parameters, only: CorFac, kbotv, ktopv
@@ -46,6 +46,9 @@ module torsional_oscillations
    real(cp), public, allocatable :: BpsdAS_Rloc(:,:)
    real(cp), public, allocatable :: BzpdAS_Rloc(:,:)
    real(cp), public, allocatable :: BpzdAS_Rloc(:,:)
+   
+   ! New data structure
+   real(cp), public, allocatable :: ddzASL_dist(:,:)
 
    public :: initialize_TO, getTO, getTOnext, getTOfinish, finalize_TO
 
@@ -88,6 +91,11 @@ contains
 
       allocate( ddzASL(l_max+1,n_r_maxStr) ) 
       bytes_allocated = bytes_allocated+ (l_max+1)*n_r_maxStr*SIZEOF_DEF_REAL
+      
+      ! New data structure
+      allocate( ddzASL_dist(n_lo_loc,n_r_maxStr) ) 
+      bytes_allocated = bytes_allocated+ (n_lo_loc)*n_r_maxStr*SIZEOF_DEF_REAL
+      
 
    end subroutine initialize_TO
 !-----------------------------------------------------------------------------
@@ -102,6 +110,9 @@ contains
       deallocate( dzAStrLMr_Rloc, dzRstrLMr_Rloc, dzStrLMr_Rloc )
       deallocate( dzStrLMr, dzRstrLMr, dzAstrLMr, dzCorLMr, dzLFLMr, dzdVpLMr )
       deallocate( dzddVpLMr )
+      
+      ! New data structure
+      deallocate(ddzASL_dist)
 
    end subroutine finalize_TO
 !-----------------------------------------------------------------------------

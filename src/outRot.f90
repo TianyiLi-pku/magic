@@ -3,11 +3,11 @@ module outRot
    use parallel_mod
    use precision_mod
    use geometry, only: n_r_max, n_r_maxMag, minc, nrp, n_phi_max, l_theta, u_theta, &
-       &            comm_theta, n_r_CMB, n_r_ICB
+       &            comm_theta, n_r_CMB, n_r_ICB, n_mlo_loc
    use radial_functions, only: r_icb, r_cmb, r, rscheme_oc
    use physical_parameters, only: kbotv, ktopv
    use num_param, only: lScale, tScale, vScale
-   use blocking, only: lo_map, lmStartB,lmStopB
+   use blocking, only: lo_map, lmStartB, lmStopB
    use logic, only: l_AM, l_save_out, l_iner, l_SRIC, l_rot_ic, &
        &            l_SRMA, l_rot_ma, l_mag_LF, l_mag, l_drift, &
        &            l_finite_diff
@@ -19,7 +19,7 @@ module outRot
    use horizontal_data, only: cosTheta, gauss
    use special, only: BIC, lGrenoble
    use useful, only: abortRun
-   use LMmapping, only: map_glbl_st
+   use LMmapping, only: map_glbl_st, map_mlo
 
    implicit none
 
@@ -40,8 +40,9 @@ module outRot
    character(len=72) :: driftVD_file, driftVQ_file
    character(len=72) :: driftBD_file, driftBQ_file
 
-   public :: write_rot, get_viscous_torque, get_angular_moment, &
-   &         get_lorentz_torque, initialize_outRot, finalize_outRot
+   public :: write_rot, get_viscous_torque, get_angular_moment, & 
+   &         get_angular_moment_dist, get_lorentz_torque, initialize_outRot, &
+   &         finalize_outRot
 
 contains
 
@@ -545,13 +546,77 @@ contains
    subroutine get_angular_moment(z10,z11,omega_ic,omega_ma,angular_moment_oc, &
               &                  angular_moment_ic,angular_moment_ma)
       !
+      !    Calculates angular momentum of outer core, inner core and
+      !    mantle. For outer core we need z(l=1|m=0,1|r), for
+      !    inner core and mantle the respective rotation rates are needed.
+      !
+
+      !-- Input of scalar fields:
+      complex(cp), intent(in) :: z10(n_r_max),z11(n_r_max)
+      real(cp),    intent(in) :: omega_ic,omega_ma
+
+      !-- output:
+      real(cp), intent(out) :: angular_moment_oc(:)
+      real(cp), intent(out) :: angular_moment_ic(:)
+      real(cp), intent(out) :: angular_moment_ma(:)
+
+      !-- local variables:
+      integer :: n_r,n
+      integer :: l1m1
+      real(cp) :: f(n_r_max,3)
+      real(cp) :: r_E_2             ! r**2
+      real(cp) :: fac
+
+      !----- Construct radial function:
+      l1m1=lo_map%lm2(1,1)
+      do n_r=1,n_r_max
+         r_E_2=r(n_r)*r(n_r)
+         if ( l1m1 > 0 ) then
+            f(n_r,1)=r_E_2* real(z11(n_r))
+            f(n_r,2)=r_E_2*aimag(z11(n_r))
+         else
+            f(n_r,1)=0.0_cp
+            f(n_r,2)=0.0_cp
+         end if
+         f(n_r,3)=r_E_2*real(z10(n_r))
+      end do
+
+      !----- Perform radial integral:
+      do n=1,3
+         angular_moment_oc(n)=rInt_R(f(:,n),r,rscheme_oc)
+      end do
+
+      !----- Apply normalisation factors of chebs and other factors
+      !      plus the sign correction for y-component:
+      fac=8.0_cp*third*pi
+      angular_moment_oc(1)= two*fac*y11_norm * angular_moment_oc(1)
+      angular_moment_oc(2)=-two*fac*y11_norm * angular_moment_oc(2)
+      angular_moment_oc(3)=     fac*y10_norm * angular_moment_oc(3)
+
+      !----- Now inner core and mantle:
+      angular_moment_ic(1)=0.0_cp
+      angular_moment_ic(2)=0.0_cp
+      angular_moment_ic(3)=c_moi_ic*omega_ic
+      angular_moment_ma(1)=0.0_cp
+      angular_moment_ma(2)=0.0_cp
+      angular_moment_ma(3)=c_moi_ma*omega_ma
+
+   end subroutine get_angular_moment
+!-----------------------------------------------------------------------
+   subroutine get_angular_moment_dist(z,omega_ic,omega_ma,angular_moment_oc, &
+              &                  angular_moment_ic,angular_moment_ma)
+      !
       !    Calculates angular momentum of outer core, inner core and      
       !    mantle. For outer core we need z(l=1|m=0,1|r), for             
       !    inner core and mantle the respective rotation rates are needed.
-      !
+      !    
+      !    BUG: this function uses the new distributed data structure, 
+      !    but does not tackle the case in which l1m0 and l1m1 are in 
+      !    different ranks. Weird results are expected
+      !    
     
       !-- Input of scalar fields:
-      complex(cp), intent(in) :: z10(n_r_max),z11(n_r_max)
+      complex(cp), intent(in) :: z(n_mlo_loc,n_r_max)
       real(cp),    intent(in) :: omega_ic,omega_ma
     
       !-- output:
@@ -560,25 +625,29 @@ contains
       real(cp), intent(out) :: angular_moment_ma(:)
     
       !-- local variables:
-      integer :: n_r_loc,n
+      integer :: nR,n
       integer :: l1m0,l1m1
       real(cp) :: f(n_r_max,3)
       real(cp) :: r_E_2             ! r**2
       real(cp) :: fac
     
       !----- Construct radial function:
-      l1m0=map_glbl_st%lm2(1,0)
-      l1m1=map_glbl_st%lm2(1,1)
-      do n_r_loc=1,n_r_max
-         r_E_2=r(n_r_loc)*r(n_r_loc)
+      l1m0= map_mlo%ml2i(0,1)
+      l1m1= map_mlo%ml2i(1,1)
+      do nR=1,n_r_max
+         r_E_2=r(nR)*r(nR)
          if ( l1m1 > 0 ) then
-            f(n_r_loc,1)=r_E_2* real(z11(n_r_loc))
-            f(n_r_loc,2)=r_E_2*aimag(z11(n_r_loc))
+            f(nR,1)=r_E_2* real(z(l1m1,nR))
+            f(nR,2)=r_E_2*aimag(z(l1m1,nR))
          else
-            f(n_r_loc,1)=0.0_cp
-            f(n_r_loc,2)=0.0_cp
+            f(nR,1)=0.0_cp
+            f(nR,2)=0.0_cp
          end if
-         f(n_r_loc,3)=r_E_2*real(z10(n_r_loc))
+         if ( l1m0 > 0 ) then
+            f(nR,3)=r_E_2*real(z(l1m0,nR))
+         else
+            f(nR,3)=0.0_cp
+         end if
       end do
     
       !----- Perform radial integral:
@@ -601,7 +670,7 @@ contains
       angular_moment_ma(2)=0.0_cp
       angular_moment_ma(3)=c_moi_ma*omega_ma
 
-   end subroutine get_angular_moment
+   end subroutine get_angular_moment_dist
 !-----------------------------------------------------------------------
    subroutine sendvals_to_rank0(field,n_r,lm_vals,vals_on_rank0)
 

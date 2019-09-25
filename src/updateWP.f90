@@ -19,7 +19,7 @@ module updateWP_mod
    use RMS, only: DifPol2hInt, dtVPolLMr, dtVPol2hInt, DifPolLMr
    use algebra, only: prepare_mat, solve_mat
    use LMLoop_data, only: llm, ulm
-   use communications !!, only: get_global_sum
+   use communications !!, only: get_global_sum !!!!!!!!!!!!! uncomment after porting!!!
    use parallel_mod, only: chunksize
    use RMS_helpers, only:  hInt2Pol
    use radial_der, only: get_dddr, get_ddr, get_dr
@@ -329,7 +329,6 @@ contains
             !do lm=1,sizeLMB2(nLMB2,nLMB)
                lm1=lm22lm(lm,nLMB2,nLMB)
                m1 =lm22m(lm,nLMB2,nLMB)
-               print *, "upWP: ", l1, m1
 
                if ( l1 == 0 ) then
                   !-- The integral of rho' r^2 dr vanishes
@@ -1151,7 +1150,7 @@ contains
             n_r_bot=n_r_icb
          end if
          
-         PRINT *, "TODO, l_double_curl!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!", __FILE__, __LINE__
+         PRINT *, "TODO, l_double_curl!!!", __FILE__, __LINE__
 
 ! ! ! ! ! ! ! !          do nR=n_r_top,n_r_bot
 ! ! ! ! ! ! ! !             do lm1=lmStart_00,lmStop
@@ -1268,12 +1267,14 @@ contains
                   &             ( w_new(i,j)-workB_new(i,j) )
                end if
             end do
-! !             if ( lRmsNext ) then
-! !                call hInt2Pol(Dif,llm,ulm,j,lmStart_00,lmStop,DifPolLMr(llm:,j), &
-! !                     &        DifPol2hInt(:,j,1),lo_map)
-! !                call hInt2Pol(dtV,llm,ulm,j,lmStart_00,lmStop, &
-! !                     &        dtVPolLMr(llm:,j),dtVPol2hInt(:,j,1),lo_map)
-! !             end if
+            if ( lRmsNext ) then
+               PRINT *, "TODO, lRmsNext!!!!!!", __FILE__, __LINE__
+               STOP
+!                call hInt2Pol(Dif,llm,ulm,j,lmStart_00,lmStop,DifPolLMr(llm:,j), &
+!                     &        DifPol2hInt(:,j,1),lo_map)
+!                call hInt2Pol(dtV,llm,ulm,j,lmStart_00,lmStop, &
+!                     &        dtVPolLMr(llm:,j),dtVPol2hInt(:,j,1),lo_map)
+            end if
          end do
 
       end if
@@ -1670,12 +1671,12 @@ contains
                   &             ( w(lm1,nR)-workB(lm1,nR) )
                end if
             end do
-! ! ! ! ! !             if ( lRmsNext ) then
-! ! ! ! ! !                call hInt2Pol(Dif,llm,ulm,nR,lmStart_00,lmStop,DifPolLMr(llm:,nR), &
-! ! ! ! ! !                     &        DifPol2hInt(:,nR,1),lo_map)
-! ! ! ! ! !                call hInt2Pol(dtV,llm,ulm,nR,lmStart_00,lmStop, &
-! ! ! ! ! !                     &        dtVPolLMr(llm:,nR),dtVPol2hInt(:,nR,1),lo_map)
-! ! ! ! ! !             end if
+            if ( lRmsNext ) then
+               call hInt2Pol(Dif,llm,ulm,nR,lmStart_00,lmStop,DifPolLMr(llm:,nR), &
+                    &        DifPol2hInt(:,nR,1),lo_map)
+               call hInt2Pol(dtV,llm,ulm,nR,lmStart_00,lmStop, &
+                    &        dtVPolLMr(llm:,nR),dtVPol2hInt(:,nR,1),lo_map)
+            end if
          end do
       end if
       
