@@ -31,7 +31,7 @@ module step_time_mod
    use radialLoop, only: radialLoopG
    use LMLoop_data, only: llm, ulm, llmMag, ulmMag, lm_per_rank, &
        &                  lm_on_last_rank
-   use LMLoop_mod, only: LMLoop
+   use LMLoop_mod, only: LMLoop, LMloop_new
    use output_data, only: tag, n_graph_step, n_graphs, n_t_graph, t_graph, &
        &                  n_spec_step, n_specs, n_t_spec, t_spec,          &
        &                  n_movie_step, n_movie_frames, n_t_movie, t_movie,&
@@ -61,7 +61,7 @@ module step_time_mod
        &                     r2lo_redist_wait, r2lo_flow, r2lo_s, r2lo_xi,  &
        &                     r2lo_b, lo2r_s, get_global_sum_dist,           &
        &                     r2lo_redist_start_dist, lo2r_redist_wait_dist, &
-       &                     ml2r_s, &
+       &                     ml2r_s, ml2r_flow, &
        &                     gather_Flm, slice_Flm, gather_FlmP
    use courant_mod, only: dt_courant
    use nonlinear_bcs, only: get_b_nl_bcs
@@ -532,7 +532,7 @@ contains
 !          if ( l_heat )                call lo2r_redist_wait_dist(lo2r_s)
          if ( l_heat )                call ml2r_s%wait()
          if ( l_chemical_conv )       call lo2r_redist_wait_dist(lo2r_xi)
-         if ( l_conv .or. l_mag_kin ) call lo2r_redist_wait_dist(lo2r_flow)
+         if ( l_conv .or. l_mag_kin ) call ml2r_flow%wait()
          if ( l_mag )                 call lo2r_redist_wait_dist(lo2r_field)
 
 #ifdef WITH_MPI
@@ -1240,13 +1240,19 @@ contains
             l_AB1 = .false.
          end if
          
-         call gather_all
+!          PERFON('gat_aj')
+         call gather_all  !Just gathers aj_nl_cmb and some other similar dudes!
+!          PERFOFF
          
-         call LMLoop(w1,coex,time,dt,lMat,lRmsNext,lPressNext,dVxVhLM_LMloc, &
-              &      dVxBhLM_LMloc,dVSrLM_LMloc,dVPrLM_LMloc,dVXirLM_LMloc,  &
-              &      dsdt_LMloc,dwdt_LMloc,dzdt_LMloc,dpdt_LMloc,dxidt_LMloc,&
-              &      dbdt_LMloc,djdt_LMloc,lorentz_torque_ma,                &
-              &      lorentz_torque_ic,b_nl_cmb,aj_nl_cmb,aj_nl_icb)
+!          call LMLoop(w1,coex,time,dt,lMat,lRmsNext,lPressNext,dVxVhLM_LMloc, &
+!               &      dVxBhLM_LMloc,dVSrLM_LMloc,dVPrLM_LMloc,dVXirLM_LMloc,  &
+!               &      dsdt_LMloc,dwdt_LMloc,dzdt_LMloc,dpdt_LMloc,dxidt_LMloc,&
+!               &      dbdt_LMloc,djdt_LMloc,lorentz_torque_ma,                &
+!               &      lorentz_torque_ic,b_nl_cmb,aj_nl_cmb,aj_nl_icb)
+         
+         call LMLoop_new(w1,coex,time,dt,lMat,lRmsNext,lPressNext,dVxVhLM_LMloc, &
+              &      dVSrLM_LMloc, dsdt_LMloc,dwdt_LMloc,dzdt_LMloc,dpdt_LMloc,&
+              &      lorentz_torque_ma,lorentz_torque_ic)
 
          if ( lVerbose ) write(*,*) '! lm-loop finished!'
          call wallTime(runTimeRstop)

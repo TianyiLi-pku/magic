@@ -19,15 +19,21 @@ module output_mod
        &            l_cmb_field, l_dt_cmb_field, l_save_out, l_non_rot,    &
        &            l_perpPar, l_energy_modes, l_heat, l_hel, l_par,       &
        &            l_chemical_conv, l_movie
+! ! ! !    use fields, only: omega_ic, omega_ma, &
    use fields, only: omega_ic, omega_ma, b_ic,db_ic, ddb_ic, aj_ic, dj_ic,   &
        &             ddj_ic, w_LMloc, dw_LMloc, ddw_LMloc, p_LMloc, xi_LMloc,&
        &             s_LMloc, ds_LMloc, z_LMloc, dz_LMloc, b_LMloc,          &
        &             db_LMloc, ddb_LMloc, aj_LMloc, dj_LMloc, ddj_LMloc,     &
        &             b_ic_LMloc, db_ic_LMloc, ddb_ic_LMloc, aj_ic_LMloc,     &
-       &             dj_ic_LMloc, ddj_ic_LMloc, dp_LMloc, xi_LMloc, dxi_LMloc
+       &             dj_ic_LMloc, ddj_ic_LMloc, dp_LMloc, xi_LMloc, dxi_LMloc, &
+       &             w_LMdist, dw_LMdist, ddw_LMdist, p_LMdist, &
+       &             s_LMdist, ds_LMdist, z_LMdist, dz_LMdist, &
+       &             dp_LMdist, xi_LMdist, dxi_LMdist
    use fieldsLast, only: dwdtLast_LMloc, dzdtLast_lo, dpdtLast_LMloc,     &
        &                 dsdtLast_LMloc, dbdtLast_LMloc, djdtLast_LMloc,  &
-       &                 dbdt_icLast_LMloc, djdt_icLast_LMloc, dxidtLast_LMloc
+       &                 dbdt_icLast_LMloc, djdt_icLast_LMloc, dxidtLast_LMloc, &
+       &                 dwdtLast_LMdist, dpdtLast_LMdist,     &
+       &                 dsdtLast_LMdist
    use kinetic_energy, only: get_e_kin, get_u_square
    use magnetic_energy, only: get_e_mag
    use fields_average_mod, only: fields_average
@@ -48,7 +54,7 @@ module output_mod
    use LMLoop_data, only: lm_per_rank, lm_on_last_rank, llm, ulm, llmMag, &
        &                  ulmMag
    use communications, only: gather_all_from_lo_to_rank0, gt_OC, gt_IC,  &
-       &                     gather_from_lo_to_rank0
+       &                     gather_from_lo_to_rank0, transform_new2old
    use out_coeff, only: write_Bcmb, write_coeff_r, write_Pot
    use getDlm_mod, only: getDlm
    use movie_data, only: movie_gather_frames_to_rank0
@@ -441,10 +447,26 @@ contains
   
       timeScaled=tScale*time
       timePassedLog=timePassedLog+dt
-  
+      
       ! We start with the computation of the energies
       ! in parallel.
       if ( l_log ) then
+      
+         call transform_new2old(w_LMdist        , w_LMloc        )
+         call transform_new2old(dw_LMdist       , dw_LMloc       )
+         call transform_new2old(ddw_LMdist      , ddw_LMloc      )
+         call transform_new2old(xi_LMdist       , xi_LMloc       )
+         call transform_new2old(s_LMdist        , s_LMloc        )
+         call transform_new2old(ds_LMdist       , ds_LMloc       )
+         call transform_new2old(z_LMdist        , z_LMloc        )
+         call transform_new2old(dz_LMdist       , dz_LMloc       )
+         call transform_new2old(p_LMdist        , p_LMloc        )
+         call transform_new2old(dp_LMdist       , dp_LMloc       )
+         call transform_new2old(dxi_LMdist      , dxi_LMloc      )
+         call transform_new2old(dwdtLast_LMdist , dwdtLast_LMloc ) 
+         call transform_new2old(dpdtLast_LMdist , dpdtLast_LMloc ) 
+         call transform_new2old(dsdtLast_LMdist , dsdtLast_LMloc ) 
+         
          nLogs=nLogs+1
          timeNormLog=timeNormLog+timePassedLog
 
@@ -1060,5 +1082,4 @@ contains
       end if
       
    end subroutine output
-!----------------------------------------------------------------------------
 end module output_mod

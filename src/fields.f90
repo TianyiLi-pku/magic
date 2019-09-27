@@ -23,14 +23,16 @@ module fields
    complex(cp), public, allocatable, target :: flow_LMdist_container(:,:,:)
    complex(cp), public, pointer :: w_LMdist(:,:),dw_LMdist(:,:),ddw_LMdist(:,:)
  
-   complex(cp), public, pointer :: z_LMloc(:,:),dz_LMloc(:,:), z_LMdist(:,:),dz_LMdist(:,:)
+   complex(cp), public, pointer :: z_LMloc(:,:),dz_LMloc(:,:)
+   complex(cp), public, pointer :: z_LMdist(:,:),dz_LMdist(:,:)
    complex(cp), public, pointer :: z_Rdist(:,:), dz_Rdist(:,:)
  
    !-- Entropy:
    complex(cp), public, allocatable, target :: s_LMloc_container(:,:,:), s_LMdist_container(:,:,:)
    complex(cp), public, allocatable, target :: s_Rdist_container(:,:,:)
    complex(cp), public, allocatable, target :: s_Rdist_test(:,:,:)  !DELETEME
-   complex(cp), public, pointer :: s_LMloc(:,:), ds_LMloc(:,:), s_LMdist(:,:), ds_LMdist(:,:)
+   complex(cp), public, pointer :: s_LMloc(:,:), ds_LMloc(:,:)
+   complex(cp), public, pointer :: s_LMdist(:,:), ds_LMdist(:,:)
    complex(cp), public, pointer :: s_Rdist(:,:), ds_Rdist(:,:)
  
    !-- Chemical composition:

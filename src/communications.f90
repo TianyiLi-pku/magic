@@ -105,7 +105,8 @@ use blocking
    integer, allocatable :: ml2r_dests(:),  ml2r_sources(:)
    integer, allocatable :: ml2r_loc_dspl(:,:)
    
-   type(ml2r_transp) :: ml2r_s
+   type(ml2r_transp), public :: ml2r_flow, ml2r_s
+   type(ml2r_transp), public :: ml2r_field, ml2r_xi
    !--
    
    !-- Slice/gather interface
@@ -329,6 +330,9 @@ contains
       !   
       call finalize_ml2r_tranposition
       call deallocate_ml2r_transp(ml2r_s)
+      call deallocate_ml2r_transp(ml2r_flow)
+      call deallocate_ml2r_transp(ml2r_field)
+      call deallocate_ml2r_transp(ml2r_xi)
    end subroutine finalize_communications_new
   
    !----------------------------------------------------------------------------
@@ -339,6 +343,9 @@ contains
    !   
       call initialize_ml2r_tranposition
       ml2r_s = allocate_ml2r_transp()
+      ml2r_flow = allocate_ml2r_transp()
+      ml2r_field = allocate_ml2r_transp()
+      ml2r_xi = allocate_ml2r_transp()
    end subroutine initialize_communications_new
   
    subroutine initialize_communications
