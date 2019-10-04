@@ -167,6 +167,10 @@ module geometry
    integer, allocatable, protected :: dist_n_lm(:)
    integer, allocatable, protected :: dist_n_lmP(:)
    integer, protected :: n_m_loc, n_lm_loc, n_lmP_loc
+   integer, protected :: n_mloMag_loc
+   integer, protected :: n_mloChe_loc
+   integer, protected :: n_mloTP_loc 
+   integer, protected :: n_mloDC_loc 
    integer, protected :: n_m_array
    
    !-- Distributed ML-Space
@@ -506,6 +510,15 @@ contains
             if(m>=0 .and. l>=0) mlo_tsid(m,l) = icoord_mlo
          end do
       end do
+      
+      n_mloMag_loc = 1
+      n_mloChe_loc = 1
+      n_mloTP_loc  = 1
+      n_mloDC_loc  = 1
+      if (l_mag          ) n_mloMag_loc = n_mlo_loc
+      if (l_chemical_conv) n_mloChe_loc = n_mlo_loc
+      if (l_TP_form      ) n_mloTP_loc  = n_mlo_loc
+      if (l_double_curl  ) n_mloDC_loc  = n_mlo_loc
       
    end subroutine distribute_mlo
    

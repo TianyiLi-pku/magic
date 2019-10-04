@@ -448,10 +448,11 @@ contains
       timeScaled=tScale*time
       timePassedLog=timePassedLog+dt
       
+      
       ! We start with the computation of the energies
       ! in parallel.
       if ( l_log ) then
-      
+         
          call transform_new2old(w_LMdist        , w_LMloc        )
          call transform_new2old(dw_LMdist       , dw_LMloc       )
          call transform_new2old(ddw_LMdist      , ddw_LMloc      )
@@ -465,10 +466,12 @@ contains
          call transform_new2old(dxi_LMdist      , dxi_LMloc      )
          call transform_new2old(dwdtLast_LMdist , dwdtLast_LMloc ) 
          call transform_new2old(dpdtLast_LMdist , dpdtLast_LMloc ) 
-         call transform_new2old(dsdtLast_LMdist , dsdtLast_LMloc ) 
+         call transform_new2old(dsdtLast_LMdist , dsdtLast_LMloc )
+         
          
          nLogs=nLogs+1
          timeNormLog=timeNormLog+timePassedLog
+         
 
          !----- Write torques and rotation rates:
          PERFON('out_rot')
@@ -548,6 +551,7 @@ contains
             PERFOFF
             if (DEBUG_OUTPUT) write(*,"(A,I6)") "Written  averages  on coord_r ",coord_r
          end if
+         
          
          if ( l_power ) then
   
@@ -737,7 +741,7 @@ contains
          call write_Bcmb(timeScaled,b_LMloc(:,n_r_cmb),l_max_cmb,   &
               &          n_cmb_setsMov,cmbMov_file,n_cmbMov_file)
       end if
-      
+
       !--- Store potential coeffs for velocity fields and magnetic fields
       if ( l_outr ) then
          PERFON('out_r')
@@ -1061,6 +1065,7 @@ contains
          
          PERFOFF
       end if
+      
 
       if ( l_SRIC .and. l_stop_time ) call outOmega(z_LMloc,omega_ic)
 
@@ -1081,5 +1086,5 @@ contains
          call zeroRms
       end if
       
-   end subroutine output
+end subroutine output
 end module output_mod

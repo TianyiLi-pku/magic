@@ -14,7 +14,7 @@ module step_time_mod
    use geometry, only: n_r_max, l_max, l_maxMag, n_r_maxMag, &
        &                 lm_max, lmP_max, lm_maxMag, n_lm_loc,   &
        &                 n_lmMag_loc, n_lmP_loc, l_r, u_r, l_r_Mag,&
-       &                 u_r_Mag, n_r_icb, n_r_cmb
+       &                 u_r_Mag, n_r_icb, n_r_cmb, n_mlo_loc, n_mloMag_loc
    use num_param, only: n_time_steps, runTimeLimit, tEnd, dtMax, &
        &                dtMin, tScale, alpha, runTime
    use blocking, only: nLMBs, lmStartB, lmStopB
@@ -62,7 +62,7 @@ module step_time_mod
        &                     r2lo_b, lo2r_s, get_global_sum_dist,           &
        &                     r2lo_redist_start_dist, lo2r_redist_wait_dist, &
        &                     ml2r_s, ml2r_flow, &
-       &                     gather_Flm, slice_Flm, gather_FlmP
+       &                     gather_Flm, slice_Flm, gather_FlmP, transform_old2new
    use courant_mod, only: dt_courant
    use nonlinear_bcs, only: get_b_nl_bcs
    use timing ! Everything is needed
@@ -82,9 +82,22 @@ module step_time_mod
    complex(cp), pointer :: dxidt_LMloc(:,:), dVXirLM_LMloc(:,:)
    complex(cp), pointer :: dVPrLM_LMloc(:,:), dVxVhLM_LMloc(:,:)
    complex(cp), pointer :: dbdt_LMloc(:,:), djdt_LMloc(:,:), dVxBhLM_LMloc(:,:)
-
+   
    complex(cp), allocatable :: dbdt_CMB_LMloc(:)
    
+   !--- (r,θ)-distributed arrays"
+   complex(cp), allocatable, target  :: dflowdt_LMdist_container(:,:,:)
+   complex(cp), allocatable, target  :: dsdt_LMdist_container(:,:,:)
+   complex(cp), allocatable, target  :: dxidt_LMdist_container(:,:,:)
+   complex(cp), allocatable, target  :: dbdt_LMdist_container(:,:,:)
+   complex(cp), pointer :: dwdt_LMdist(:,:), dzdt_LMdist(:,:)
+   complex(cp), pointer :: dpdt_LMdist(:,:), dsdt_LMdist(:,:), dVSrLM_LMdist(:,:)
+   complex(cp), pointer :: dxidt_LMdist(:,:), dVXirLM_LMdist(:,:)
+   complex(cp), pointer :: dVPrLM_LMdist(:,:), dVxVhLM_LMdist(:,:)
+   complex(cp), pointer :: dbdt_LMdist(:,:), djdt_LMdist(:,:), dVxBhLM_LMdist(:,:)
+   
+   
+   complex(cp), allocatable :: dbdt_CMB_LMdist(:)
    !--- (r,θ)-distributed arrays"
    complex(cp), allocatable, target  :: dxidt_Rdist_container(:,:,:)
    complex(cp), allocatable, target  :: dflowdt_Rdist_container(:,:,:)
@@ -209,6 +222,7 @@ contains
          dVSrLM_LMloc(llm:ulm,1:n_r_max) => dsdt_LMloc_container(:,:,2)
          dVPrLM_LMloc(llm:ulm,1:n_r_max) => dsdt_LMloc_container(:,:,3)
          bytes_allocated = bytes_allocated+3*(ulm-llm+1)*n_r_max*SIZEOF_DEF_COMPLEX
+         
       else
          allocate(dsdt_LMloc_container(llm:ulm,n_r_max,1:2))
          dsdt_LMloc(llm:ulm,1:n_r_max)   => dsdt_LMloc_container(:,:,1)
@@ -241,9 +255,74 @@ contains
       bytes_allocated = bytes_allocated+(ulmMag-llmMag+1)*SIZEOF_DEF_COMPLEX
 
       local_bytes_used = bytes_allocated-local_bytes_used
+      
+      call initialize_step_time_dist(local_bytes_used)
+      
       call memWrite('step_time.f90', local_bytes_used)
 
    end subroutine initialize_step_time
+!-------------------------------------------------------------------------------
+   subroutine initialize_step_time_dist(local_bytes_used)
+   
+      !-- Local variables
+      integer :: nR,lm
+      integer(lip), intent(inout):: local_bytes_used
+
+      if ( l_double_curl ) then
+         allocate(dflowdt_LMdist_container(1:n_mlo_loc,n_r_max,1:4))
+         dwdt_LMdist(1:n_mlo_loc,1:n_r_max) => dflowdt_LMdist_container(:,:,1)
+         dzdt_LMdist(1:n_mlo_loc,1:n_r_max) => dflowdt_LMdist_container(:,:,2)
+         dpdt_LMdist(1:n_mlo_loc,1:n_r_max) => dflowdt_LMdist_container(:,:,3)
+         dVxVhLM_LMdist(1:n_mlo_loc,1:n_r_max) => dflowdt_LMdist_container(:,:,4)
+         local_bytes_used = local_bytes_used+4*(n_mlo_loc)*n_r_max*SIZEOF_DEF_COMPLEX
+      else
+         allocate(dflowdt_LMdist_container(1:n_mlo_loc,n_r_max,1:3))
+         dwdt_LMdist(1:n_mlo_loc,1:n_r_max) => dflowdt_LMdist_container(:,:,1)
+         dzdt_LMdist(1:n_mlo_loc,1:n_r_max) => dflowdt_LMdist_container(:,:,2)
+         dpdt_LMdist(1:n_mlo_loc,1:n_r_max) => dflowdt_LMdist_container(:,:,3)
+         allocate( dVxVhLM_LMdist(1:1,1:1) )
+         local_bytes_used = local_bytes_used+3*(n_mlo_loc)*n_r_max*SIZEOF_DEF_COMPLEX
+      end if
+
+      if ( l_TP_form ) then
+         allocate(dsdt_LMdist_container(1:n_mlo_loc,n_r_max,1:3))
+         dsdt_LMdist(1:n_mlo_loc,1:n_r_max)   => dsdt_LMdist_container(:,:,1)
+         dVSrLM_LMdist(1:n_mlo_loc,1:n_r_max) => dsdt_LMdist_container(:,:,2)
+         dVPrLM_LMdist(1:n_mlo_loc,1:n_r_max) => dsdt_LMdist_container(:,:,3)
+         local_bytes_used = local_bytes_used+3*(n_mlo_loc)*n_r_max*SIZEOF_DEF_COMPLEX
+         
+      else
+         allocate(dsdt_LMdist_container(1:n_mlo_loc,n_r_max,1:2))
+         dsdt_LMdist(1:n_mlo_loc,1:n_r_max)   => dsdt_LMdist_container(:,:,1)
+         dVSrLM_LMdist(1:n_mlo_loc,1:n_r_max) => dsdt_LMdist_container(:,:,2)
+         allocate( dVPrLM_LMdist(1:1,1:1) )
+         local_bytes_used = local_bytes_used+2*(n_mlo_loc)*n_r_max*SIZEOF_DEF_COMPLEX
+      end if
+
+      if ( l_chemical_conv ) then
+         allocate(dxidt_LMdist_container(1:n_mlo_loc,n_r_max,1:2))
+         dxidt_LMdist(1:n_mlo_loc,1:n_r_max)   => dxidt_LMdist_container(:,:,1)
+         dVXirLM_LMdist(1:n_mlo_loc,1:n_r_max) => dxidt_LMdist_container(:,:,2)
+         local_bytes_used = local_bytes_used+2*(n_mlo_loc)*n_r_max*SIZEOF_DEF_COMPLEX
+      else
+         allocate(dxidt_LMdist_container(1,1,1:2))
+         dxidt_LMdist(1:1,1:1)   => dxidt_LMdist_container(:,:,1)
+         dVXirLM_LMdist(1:1,1:1) => dxidt_LMdist_container(:,:,2)
+      end if
+
+      allocate(dbdt_LMdist_container(1:n_mloMag_loc,n_r_maxMag,1:3))
+      dbdt_LMdist(1:n_mloMag_loc,1:n_r_maxMag)    => dbdt_LMdist_container(:,:,1)
+      djdt_LMdist(1:n_mloMag_loc,1:n_r_maxMag)    => dbdt_LMdist_container(:,:,2)
+      dVxBhLM_LMdist(1:n_mloMag_loc,1:n_r_maxMag) => dbdt_LMdist_container(:,:,3)
+      local_bytes_used = local_bytes_used+ &
+                        3*(n_mloMag_loc)*n_r_maxMag*SIZEOF_DEF_COMPLEX
+
+      ! Only when l_dt_cmb_field is requested
+      ! There might be a way to allocate only when needed
+      allocate ( dbdt_CMB_LMdist(1:n_mloMag_loc) )
+      local_bytes_used = local_bytes_used+(n_mloMag_loc)*SIZEOF_DEF_COMPLEX
+
+   end subroutine initialize_step_time_dist
 !-------------------------------------------------------------------------------
    subroutine finalize_step_time
 
@@ -494,7 +573,24 @@ contains
       else
          n_time_steps_go=n_time_steps+1  ! Last time step for output only !
       end if
-
+      
+!       call transform_old2new(w_LMloc       , w_LMdist        )
+!       call transform_old2new(dw_LMloc      , dw_LMdist       )
+!       call transform_old2new(ddw_LMloc     , ddw_LMdist      )
+!       call transform_old2new(xi_LMloc      , xi_LMdist       )
+!       call transform_old2new(s_LMloc       , s_LMdist        )
+!       call transform_old2new(ds_LMloc      , ds_LMdist       )
+!       call transform_old2new(z_LMloc       , z_LMdist        )
+!       call transform_old2new(dz_LMloc      , dz_LMdist       )
+!       call transform_old2new(p_LMloc       , p_LMdist        )
+!       call transform_old2new(dp_LMloc      , dp_LMdist       )
+!       call transform_old2new(dxi_LMloc     , dxi_LMdist      )
+!       call transform_old2new(dwdtLast_LMloc, dwdtLast_LMdist ) 
+!       call transform_old2new(dpdtLast_LMloc, dpdtLast_LMdist ) 
+!       call transform_old2new(dsdtLast_LMloc, dsdtLast_LMdist ) 
+      
+      
+      
 #ifdef WITH_MPI
       call mpi_barrier(comm_r,ierr)
 #endif
@@ -503,8 +599,7 @@ contains
       !LIKWID_ON('tloop')
       outer: do n_time_step=1,n_time_steps_go 
          n_time_cour=n_time_cour+1
-         
-         
+                  
          if ( lVerbose .or. DEBUG_OUTPUT ) then 
             write(*,*)
             write(*,*) '! Starting time step ',n_time_step
@@ -991,26 +1086,42 @@ contains
          ! =====================================================================
          if ( lVerbose ) write(*,*) "! start r2lo redistribution"
          
+         !!!!!!!!TODO TERRIBLE PERFORMANCE BECAUSE OF THE TRANSFORM OLD2NEW!!!!!!!!!
          PERFON('r2lo_dst')
          if ( l_conv .or. l_mag_kin ) then
             call r2lo_redist_start_dist(r2lo_flow,dflowdt_Rdist_container,dflowdt_LMloc_container)
             call r2lo_redist_wait(r2lo_flow)
+            call transform_old2new(dwdt_LMloc, dwdt_LMdist )
+            call transform_old2new(dzdt_LMloc, dzdt_LMdist )
+            call transform_old2new(dpdt_LMloc, dpdt_LMdist )
+            if ( l_double_curl ) call transform_old2new(dVxVhLM_LMloc, dVxVhLM_LMdist)
          end if
 
          if ( l_heat ) then
             call r2lo_redist_start_dist(r2lo_s,dsdt_Rdist_container,dsdt_LMloc_container)
             call r2lo_redist_wait(r2lo_s)
+            call transform_old2new(dsdt_LMloc,   dsdt_LMdist  )
+            call transform_old2new(dVSrLM_LMloc, dVSrLM_LMdist)
+            if (l_TP_form) call transform_old2new(dVPrLM_LMloc,  dVPrLM_LMdist)
+            
          end if
 
          if ( l_chemical_conv ) then
             call r2lo_redist_start_dist(r2lo_xi,dxidt_Rdist_container,dxidt_LMloc_container)
             call r2lo_redist_wait(r2lo_xi)
+            call transform_old2new(dxidt_LMloc,   dxidt_LMdist   )
+            call transform_old2new(dVXirLM_LMloc, dVXirLM_LMdist )
          end if
 
          if ( l_mag ) then
             call r2lo_redist_start_dist(r2lo_b,dbdt_Rdist_container,dbdt_LMloc_container)
             call r2lo_redist_wait(r2lo_b)
+            call transform_old2new(dbdt_LMloc,    dbdt_LMdist   )
+            call transform_old2new(djdt_LMloc,    djdt_LMdist   )
+            call transform_old2new(dVxBhLM_LMloc, dVxBhLM_LMdist)
          end if
+         !!!!!!!!TODO TERRIBLE PERFORMANCE BECAUSE OF THE TRANSFORM OLD2NEW!!!!!!!!!
+         
 #ifdef WITH_MPI
          ! ------------------
          ! also exchange the lorentz_torques which are only set at the boundary points
@@ -1076,6 +1187,7 @@ contains
             call scatter_from_rank0_to_lo(dbdt_CMB, dbdt_CMB_LMloc)
          end if
          if ( lVerbose ) write(*,*) "! start real output"
+         
          call output(time,dt,dtNew,n_time_step,l_stop_time,                &
               &      l_Bpot,l_Vpot,l_Tpot,l_log,l_graph,lRmsCalc,          &
               &      l_store,l_new_rst_file,                               &
@@ -1088,8 +1200,10 @@ contains
               &      fpoynLMr_Rloc,fresLMr_Rloc,EperpLMr_Rloc,EparLMr_Rloc,& 
               &      EperpaxiLMr_Rloc,EparaxiLMr_Rloc)
          PERFOFF
+         
+         
          if ( lVerbose ) write(*,*) "! output finished"
-
+         
          if ( l_graph ) then
 #ifdef WITH_MPI
             PERFON('graph')
@@ -1250,9 +1364,10 @@ contains
 !               &      dbdt_LMloc,djdt_LMloc,lorentz_torque_ma,                &
 !               &      lorentz_torque_ic,b_nl_cmb,aj_nl_cmb,aj_nl_icb)
          
-         call LMLoop_new(w1,coex,time,dt,lMat,lRmsNext,lPressNext,dVxVhLM_LMloc, &
-              &      dVSrLM_LMloc, dsdt_LMloc,dwdt_LMloc,dzdt_LMloc,dpdt_LMloc,&
+         call LMLoop_new(w1,coex,time,dt,lMat,lRmsNext,lPressNext,dVxVhLM_LMdist, &
+              &      dVSrLM_LMdist, dsdt_LMdist,dwdt_LMdist,dzdt_LMdist,dpdt_LMdist,&
               &      lorentz_torque_ma,lorentz_torque_ic)
+!          print '(A,3G10.3)', "~~~~~Ω~~~~~> ", ABS(SUM(z_LMdist)), ABS(SUM(dzdt_LMdist))
 
          if ( lVerbose ) write(*,*) '! lm-loop finished!'
          call wallTime(runTimeRstop)
@@ -1349,9 +1464,10 @@ contains
             end if
             
          end if
+         
+      !LIKWID_OFF('tloop')
       end do outer ! end of time stepping !
       
-      !LIKWID_OFF('tloop')
       PERFOFF
       if ( l_movie ) then
          if ( rank == 0 ) then

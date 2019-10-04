@@ -263,7 +263,6 @@ contains
 
          !-- Output: every 10th averaging step and at end of run
          if ( l_stop_time .or. mod(n_time_ave,10) == 0 ) then
-
             !------ Output:
             if ( BV == 'B' ) then
                outFile='mag_spec_ave.'//tag

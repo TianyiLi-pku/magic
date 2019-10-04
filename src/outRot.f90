@@ -377,37 +377,39 @@ contains
     
             call get_angular_moment(z10,z11,omega_ic,omega_ma,angular_moment_oc, &
                  &                  angular_moment_ic,angular_moment_ma)
-            if ( l_save_out ) then
-               open(newunit=n_angular_file, file=angular_file, status='unknown', &
-               &    position='append')
-            end if
-            AMz=angular_moment_oc(3)+angular_moment_ic(3)+angular_moment_ma(3)
-            if ( abs(AMz) < tolerance ) AMz=0.0_cp
-            eKinAMz=half*(angular_moment_oc(3)**2/c_moi_oc + &
-            &             angular_moment_ic(3)**2/c_moi_ic + &
-            &             angular_moment_ma(3)**2/c_moi_ma )
-            if ( abs(eKinAMz) < tolerance ) eKinAMz=0.0_cp
-            eKinIC=half*angular_moment_ic(3)**2/c_moi_ic
-            eKinOC=half*angular_moment_oc(3)**2/c_moi_oc
-            eKinMA=half*angular_moment_ma(3)**2/c_moi_ma
-            if ( AMzLast /= 0.0_cp ) then
-               !write(*,"(A,4ES22.15)") "col9 = ",eKinAMz,eKinAMzLast, &
-               !     &                  dt,(eKinAMz-eKinAMzLast)
-               write(n_angular_file,'(1p,2x,ES20.12,5ES14.6,3ES20.12)', advance='no') &
-               &     time*tScale, angular_moment_oc,                                  &
-               &     angular_moment_ic(3), angular_moment_ma(3),                      &
-               &     AMz,(AMz-AMzLast)/AMzLast/dt,eKinAMz
-               if (eKinAMzLast /= 0.0_cp) then
-                  write(n_angular_file,'(1ES20.12)', advance='no') &
-                  &     (eKinAMz-eKinAMzLast)/eKinAMzLast/dt
-               else
-                  if (rank == 0) write(n_angular_file,'(1ES20.12)', advance='no') 0.0
+            if ( rank == 0 ) then
+               if ( l_save_out ) then
+                  open(newunit=n_angular_file, file=angular_file, status='unknown', &
+                  &    position='append')
                end if
-               if (rank == 0) write(n_angular_file,'(3ES20.12)') eKinIC,eKinOC,eKinMA
+               AMz=angular_moment_oc(3)+angular_moment_ic(3)+angular_moment_ma(3)
+               if ( abs(AMz) < tolerance ) AMz=0.0_cp
+               eKinAMz=half*(angular_moment_oc(3)**2/c_moi_oc + &
+               &             angular_moment_ic(3)**2/c_moi_ic + &
+               &             angular_moment_ma(3)**2/c_moi_ma )
+               if ( abs(eKinAMz) < tolerance ) eKinAMz=0.0_cp
+               eKinIC=half*angular_moment_ic(3)**2/c_moi_ic
+               eKinOC=half*angular_moment_oc(3)**2/c_moi_oc
+               eKinMA=half*angular_moment_ma(3)**2/c_moi_ma
+               if ( AMzLast /= 0.0_cp ) then
+                  !write(*,"(A,4ES22.15)") "col9 = ",eKinAMz,eKinAMzLast, &
+                  !     &                  dt,(eKinAMz-eKinAMzLast)
+                  write(n_angular_file,'(1p,2x,ES20.12,5ES14.6,3ES20.12)', advance='no') &
+                  &     time*tScale, angular_moment_oc,                                  &
+                  &     angular_moment_ic(3), angular_moment_ma(3),                      &
+                  &     AMz,(AMz-AMzLast)/AMzLast/dt,eKinAMz
+                  if (eKinAMzLast /= 0.0_cp) then
+                     write(n_angular_file,'(1ES20.12)', advance='no') &
+                     &     (eKinAMz-eKinAMzLast)/eKinAMzLast/dt
+                  else
+                     if (rank == 0) write(n_angular_file,'(1ES20.12)', advance='no') 0.0
+                  end if
+                  if (rank == 0) write(n_angular_file,'(3ES20.12)') eKinIC,eKinOC,eKinMA
+               end if
+               if ( l_save_out ) close(n_angular_file)
+               AMzLast=AMz
+               eKinAMzLast=eKinAMz
             end if
-            if ( l_save_out ) close(n_angular_file)
-            AMzLast=AMz
-            eKinAMzLast=eKinAMz
          end if
       end if
     

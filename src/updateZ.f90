@@ -1059,7 +1059,6 @@ contains
             
          end do ! loop over local m's
          
-         
          call solve_mat(zMat_new(:,:,lj),n_r_max,n_r_max, &
                &         zPivot_new(:,lj),rhs1_new(:,1:nRHS),nRHS)
          
@@ -1255,7 +1254,7 @@ contains
             &    real(dz(l1m0,n_r_max)) )
          end if
       end if
-
+      
    end subroutine updateZ_new
    
    

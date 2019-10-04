@@ -31,8 +31,9 @@ module start_fields
    use LMLoop_data, only: lm_per_rank, lm_on_last_rank, llm, ulm, &
        &                  ulmMag,llmMag
    use parallel_mod, only: rank, coord_r, n_ranks_r, nLMBs_per_rank, comm_r
-   use communications, only: lo2r_s, lo2r_flow, lo2r_field, &
-       &                     lo2r_xi, lo2r_redist_start_dist
+   use communications, only: lo2r_s, lo2r_flow, lo2r_field,   &
+       &                     lo2r_xi, lo2r_redist_start_dist, &
+       &                     ml2r_s, ml2r_flow, transform_old2new
    use radial_der, only: get_dr, get_ddr
    use radial_der_even, only: get_ddr_even
    use readCheckPoints, only: readStartFields_old, readStartFields
@@ -491,19 +492,49 @@ contains
       !print*,"Start redistribution in getStartfields"
       ! start the redistribution
       if ( l_heat ) then
-         call lo2r_redist_start_dist(lo2r_s,s_LMloc_container,s_Rdist_container)
+         call transform_old2new(s_LMloc       , s_LMdist        )
+         call transform_old2new(ds_LMloc      , ds_LMdist       )
+         call ml2r_s%start(s_LMdist_container, s_Rdist_container, 2)
+!          call lo2r_redist_start_dist(lo2r_s,s_LMloc_container,s_Rdist_container)
       end if
       if ( l_chemical_conv ) then
+         call transform_old2new(xi_LMloc       , xi_LMdist        )
+         call transform_old2new(dxi_LMloc      , dxi_LMdist       )
+!          call ml2r_xi%start(xi_LMdist_container, s_Rdist_container, 2)
          call lo2r_redist_start_dist(lo2r_xi,xi_LMloc_container,xi_Rdist_container)
       end if
       if ( l_conv .or. l_mag_kin ) then
-         call lo2r_redist_start_dist(lo2r_flow,flow_LMloc_container,flow_Rdist_container)
+         call transform_old2new(w_LMloc  , w_LMdist  )
+         call transform_old2new(dw_LMloc , dw_LMdist )
+         call transform_old2new(ddw_LMloc, ddw_LMdist)
+         call transform_old2new(z_LMloc  , z_LMdist  )
+         call transform_old2new(dz_LMloc , dz_LMdist )
+         call transform_old2new(p_LMloc  , p_LMdist  )
+         call transform_old2new(dp_LMloc , dp_LMdist )
+         
+         call transform_old2new(dzdtLast_lo, dzdtLast_lodist )
+         call ml2r_flow%start(flow_LMdist_container, flow_Rdist_container, 7)
+!          call lo2r_redist_start_dist(lo2r_flow,flow_LMloc_container,flow_Rdist_container)
       end if
     
       if ( l_mag ) then
+         call transform_old2new(b_ic_LMloc  , b_ic_LMdist  )
+         call transform_old2new(db_ic_LMloc , db_ic_LMdist )
+         call transform_old2new(ddb_ic_LMloc, ddb_ic_LMdist)
+         call transform_old2new(aj_ic_LMloc , aj_ic_LMdist )
+         call transform_old2new(dj_ic_LMloc , dj_ic_LMdist )
+         call transform_old2new(ddj_ic_LMloc, ddj_ic_LMdist)
+         
+         call transform_old2new(b_LMloc  , b_LMdist  )
+         call transform_old2new(db_LMloc , db_LMdist )
+         call transform_old2new(ddb_LMloc, ddb_LMdist)
+         call transform_old2new(aj_LMloc , aj_LMdist )
+         call transform_old2new(dj_LMloc , dj_LMdist )
+         call transform_old2new(ddj_LMloc, ddj_LMdist)
+!          call ml2r_field%start(flow_LMdist_container, flow_Rdist_container, 6)
          call lo2r_redist_start_dist(lo2r_field,field_LMloc_container,field_Rdist_container)
       end if
-    
+      
       !print*,"End of getStartFields"
       !PERFOFF
    end subroutine getStartFields
