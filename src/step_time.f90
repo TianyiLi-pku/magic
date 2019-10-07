@@ -61,8 +61,9 @@ module step_time_mod
        &                     r2lo_redist_wait, r2lo_flow, r2lo_s, r2lo_xi,  &
        &                     r2lo_b, lo2r_s, get_global_sum_dist,           &
        &                     r2lo_redist_start_dist, lo2r_redist_wait_dist, &
-       &                     ml2r_s, ml2r_flow, &
-       &                     gather_Flm, slice_Flm, gather_FlmP, transform_old2new
+       &                     ml2r_s, ml2r_flow, r2lm_dflowdt, r2lm_dsdt,    &
+       &                     r2lm_dxidt, r2lm_dbdt, &
+       &                     gather_Flm, slice_Flm, gather_FlmP
    use courant_mod, only: dt_courant
    use nonlinear_bcs, only: get_b_nl_bcs
    use timing ! Everything is needed
@@ -72,17 +73,7 @@ module step_time_mod
 
    private
 
-   ! The same arrays, but now the LM local part
-   complex(cp), allocatable, target  :: dflowdt_LMloc_container(:,:,:)
-   complex(cp), allocatable, target  :: dsdt_LMloc_container(:,:,:)
-   complex(cp), allocatable, target  :: dxidt_LMloc_container(:,:,:)
-   complex(cp), allocatable, target  :: dbdt_LMloc_container(:,:,:)
-   complex(cp), pointer :: dwdt_LMloc(:,:), dzdt_LMloc(:,:)
-   complex(cp), pointer :: dpdt_LMloc(:,:), dsdt_LMloc(:,:), dVSrLM_LMloc(:,:)
-   complex(cp), pointer :: dxidt_LMloc(:,:), dVXirLM_LMloc(:,:)
-   complex(cp), pointer :: dVPrLM_LMloc(:,:), dVxVhLM_LMloc(:,:)
-   complex(cp), pointer :: dbdt_LMloc(:,:), djdt_LMloc(:,:), dVxBhLM_LMloc(:,:)
-   
+   ! LEGACY, will be deleted
    complex(cp), allocatable :: dbdt_CMB_LMloc(:)
    
    !--- (r,θ)-distributed arrays"
@@ -96,13 +87,14 @@ module step_time_mod
    complex(cp), pointer :: dVPrLM_LMdist(:,:), dVxVhLM_LMdist(:,:)
    complex(cp), pointer :: dbdt_LMdist(:,:), djdt_LMdist(:,:), dVxBhLM_LMdist(:,:)
    
-   
    complex(cp), allocatable :: dbdt_CMB_LMdist(:)
+   
    !--- (r,θ)-distributed arrays"
    complex(cp), allocatable, target  :: dxidt_Rdist_container(:,:,:)
    complex(cp), allocatable, target  :: dflowdt_Rdist_container(:,:,:)
    complex(cp), allocatable, target  :: dsdt_Rdist_container(:,:,:)
    complex(cp), allocatable, target  :: dbdt_Rdist_container(:,:,:)
+   
    
    !DIR$ ATTRIBUTES ALIGN:64 :: dwdt_dist,dzdt_dist,dpdt_dist
    complex(cp), pointer :: dwdt_dist(:,:), dzdt_dist(:,:), dpdt_dist(:,:)
@@ -177,7 +169,6 @@ contains
 
       ! first touch dist
       do nR=l_r,u_r
-         !$OMP PARALLEL do 
          do lm=1,n_lm_loc
             if ( l_mag ) then
                dbdt_dist(lm,nR)=zero
@@ -196,92 +187,23 @@ contains
                dVXirLM_dist(lm,nR)=zero
             end if
          end do
-         !$OMP END PARALLEL DO
       end do
 
       ! The same arrays, but now the LM local part
-      if ( l_double_curl ) then
-         allocate(dflowdt_LMloc_container(llm:ulm,n_r_max,1:4))
-         dwdt_LMloc(llm:ulm,1:n_r_max) => dflowdt_LMloc_container(:,:,1)
-         dzdt_LMloc(llm:ulm,1:n_r_max) => dflowdt_LMloc_container(:,:,2)
-         dpdt_LMloc(llm:ulm,1:n_r_max) => dflowdt_LMloc_container(:,:,3)
-         dVxVhLM_LMloc(llm:ulm,1:n_r_max) => dflowdt_LMloc_container(:,:,4)
-         bytes_allocated = bytes_allocated+4*(ulm-llm+1)*n_r_max*SIZEOF_DEF_COMPLEX
-      else
-         allocate(dflowdt_LMloc_container(llm:ulm,n_r_max,1:3))
-         dwdt_LMloc(llm:ulm,1:n_r_max) => dflowdt_LMloc_container(:,:,1)
-         dzdt_LMloc(llm:ulm,1:n_r_max) => dflowdt_LMloc_container(:,:,2)
-         dpdt_LMloc(llm:ulm,1:n_r_max) => dflowdt_LMloc_container(:,:,3)
-         allocate( dVxVhLM_LMloc(1:1,1:1) )
-         bytes_allocated = bytes_allocated+3*(ulm-llm+1)*n_r_max*SIZEOF_DEF_COMPLEX
-      end if
-
-      if ( l_TP_form ) then
-         allocate(dsdt_LMloc_container(llm:ulm,n_r_max,1:3))
-         dsdt_LMloc(llm:ulm,1:n_r_max)   => dsdt_LMloc_container(:,:,1)
-         dVSrLM_LMloc(llm:ulm,1:n_r_max) => dsdt_LMloc_container(:,:,2)
-         dVPrLM_LMloc(llm:ulm,1:n_r_max) => dsdt_LMloc_container(:,:,3)
-         bytes_allocated = bytes_allocated+3*(ulm-llm+1)*n_r_max*SIZEOF_DEF_COMPLEX
-         
-      else
-         allocate(dsdt_LMloc_container(llm:ulm,n_r_max,1:2))
-         dsdt_LMloc(llm:ulm,1:n_r_max)   => dsdt_LMloc_container(:,:,1)
-         dVSrLM_LMloc(llm:ulm,1:n_r_max) => dsdt_LMloc_container(:,:,2)
-         allocate( dVPrLM_LMloc(1:1,1:1) )
-         bytes_allocated = bytes_allocated+2*(ulm-llm+1)*n_r_max*SIZEOF_DEF_COMPLEX
-      end if
-
-      if ( l_chemical_conv ) then
-         allocate(dxidt_LMloc_container(llm:ulm,n_r_max,1:2))
-         dxidt_LMloc(llm:ulm,1:n_r_max)   => dxidt_LMloc_container(:,:,1)
-         dVXirLM_LMloc(llm:ulm,1:n_r_max) => dxidt_LMloc_container(:,:,2)
-         bytes_allocated = bytes_allocated+2*(ulm-llm+1)*n_r_max*SIZEOF_DEF_COMPLEX
-      else
-         allocate(dxidt_LMloc_container(1,1,1:2))
-         dxidt_LMloc(1:1,1:1)   => dxidt_LMloc_container(:,:,1)
-         dVXirLM_LMloc(1:1,1:1) => dxidt_LMloc_container(:,:,2)
-      end if
-
-      allocate(dbdt_LMloc_container(llmMag:ulmMag,n_r_maxMag,1:3))
-      dbdt_LMloc(llmMag:ulmMag,1:n_r_maxMag)    => dbdt_LMloc_container(:,:,1)
-      djdt_LMloc(llmMag:ulmMag,1:n_r_maxMag)    => dbdt_LMloc_container(:,:,2)
-      dVxBhLM_LMloc(llmMag:ulmMag,1:n_r_maxMag) => dbdt_LMloc_container(:,:,3)
-      bytes_allocated = bytes_allocated+ &
-                        3*(ulmMag-llmMag+1)*n_r_maxMag*SIZEOF_DEF_COMPLEX
-
-      ! Only when l_dt_cmb_field is requested
-      ! There might be a way to allocate only when needed
-      allocate ( dbdt_CMB_LMloc(llmMag:ulmMag) )
-      bytes_allocated = bytes_allocated+(ulmMag-llmMag+1)*SIZEOF_DEF_COMPLEX
-
-      local_bytes_used = bytes_allocated-local_bytes_used
-      
-      call initialize_step_time_dist(local_bytes_used)
-      
-      call memWrite('step_time.f90', local_bytes_used)
-
-   end subroutine initialize_step_time
-!-------------------------------------------------------------------------------
-   subroutine initialize_step_time_dist(local_bytes_used)
-   
-      !-- Local variables
-      integer :: nR,lm
-      integer(lip), intent(inout):: local_bytes_used
-
       if ( l_double_curl ) then
          allocate(dflowdt_LMdist_container(1:n_mlo_loc,n_r_max,1:4))
          dwdt_LMdist(1:n_mlo_loc,1:n_r_max) => dflowdt_LMdist_container(:,:,1)
          dzdt_LMdist(1:n_mlo_loc,1:n_r_max) => dflowdt_LMdist_container(:,:,2)
          dpdt_LMdist(1:n_mlo_loc,1:n_r_max) => dflowdt_LMdist_container(:,:,3)
          dVxVhLM_LMdist(1:n_mlo_loc,1:n_r_max) => dflowdt_LMdist_container(:,:,4)
-         local_bytes_used = local_bytes_used+4*(n_mlo_loc)*n_r_max*SIZEOF_DEF_COMPLEX
+         bytes_allocated = bytes_allocated+4*(n_mlo_loc)*n_r_max*SIZEOF_DEF_COMPLEX
       else
          allocate(dflowdt_LMdist_container(1:n_mlo_loc,n_r_max,1:3))
          dwdt_LMdist(1:n_mlo_loc,1:n_r_max) => dflowdt_LMdist_container(:,:,1)
          dzdt_LMdist(1:n_mlo_loc,1:n_r_max) => dflowdt_LMdist_container(:,:,2)
          dpdt_LMdist(1:n_mlo_loc,1:n_r_max) => dflowdt_LMdist_container(:,:,3)
          allocate( dVxVhLM_LMdist(1:1,1:1) )
-         local_bytes_used = local_bytes_used+3*(n_mlo_loc)*n_r_max*SIZEOF_DEF_COMPLEX
+         bytes_allocated = bytes_allocated+3*(n_mlo_loc)*n_r_max*SIZEOF_DEF_COMPLEX
       end if
 
       if ( l_TP_form ) then
@@ -289,21 +211,20 @@ contains
          dsdt_LMdist(1:n_mlo_loc,1:n_r_max)   => dsdt_LMdist_container(:,:,1)
          dVSrLM_LMdist(1:n_mlo_loc,1:n_r_max) => dsdt_LMdist_container(:,:,2)
          dVPrLM_LMdist(1:n_mlo_loc,1:n_r_max) => dsdt_LMdist_container(:,:,3)
-         local_bytes_used = local_bytes_used+3*(n_mlo_loc)*n_r_max*SIZEOF_DEF_COMPLEX
-         
+         bytes_allocated = bytes_allocated+3*(n_mlo_loc)*n_r_max*SIZEOF_DEF_COMPLEX
       else
          allocate(dsdt_LMdist_container(1:n_mlo_loc,n_r_max,1:2))
          dsdt_LMdist(1:n_mlo_loc,1:n_r_max)   => dsdt_LMdist_container(:,:,1)
          dVSrLM_LMdist(1:n_mlo_loc,1:n_r_max) => dsdt_LMdist_container(:,:,2)
          allocate( dVPrLM_LMdist(1:1,1:1) )
-         local_bytes_used = local_bytes_used+2*(n_mlo_loc)*n_r_max*SIZEOF_DEF_COMPLEX
+         bytes_allocated = bytes_allocated+2*(n_mlo_loc)*n_r_max*SIZEOF_DEF_COMPLEX
       end if
 
       if ( l_chemical_conv ) then
          allocate(dxidt_LMdist_container(1:n_mlo_loc,n_r_max,1:2))
          dxidt_LMdist(1:n_mlo_loc,1:n_r_max)   => dxidt_LMdist_container(:,:,1)
          dVXirLM_LMdist(1:n_mlo_loc,1:n_r_max) => dxidt_LMdist_container(:,:,2)
-         local_bytes_used = local_bytes_used+2*(n_mlo_loc)*n_r_max*SIZEOF_DEF_COMPLEX
+         bytes_allocated = bytes_allocated+2*(n_mlo_loc)*n_r_max*SIZEOF_DEF_COMPLEX
       else
          allocate(dxidt_LMdist_container(1,1,1:2))
          dxidt_LMdist(1:1,1:1)   => dxidt_LMdist_container(:,:,1)
@@ -314,39 +235,53 @@ contains
       dbdt_LMdist(1:n_mloMag_loc,1:n_r_maxMag)    => dbdt_LMdist_container(:,:,1)
       djdt_LMdist(1:n_mloMag_loc,1:n_r_maxMag)    => dbdt_LMdist_container(:,:,2)
       dVxBhLM_LMdist(1:n_mloMag_loc,1:n_r_maxMag) => dbdt_LMdist_container(:,:,3)
-      local_bytes_used = local_bytes_used+ &
+      bytes_allocated = bytes_allocated+ &
                         3*(n_mloMag_loc)*n_r_maxMag*SIZEOF_DEF_COMPLEX
 
       ! Only when l_dt_cmb_field is requested
       ! There might be a way to allocate only when needed
       allocate ( dbdt_CMB_LMdist(1:n_mloMag_loc) )
-      local_bytes_used = local_bytes_used+(n_mloMag_loc)*SIZEOF_DEF_COMPLEX
+      bytes_allocated = bytes_allocated+(n_mloMag_loc)*SIZEOF_DEF_COMPLEX
+      
+      allocate ( dbdt_CMB_LMloc(llmMag:ulmMag) )
+      bytes_allocated = bytes_allocated+(ulmMag-llmMag+1)*SIZEOF_DEF_COMPLEX
+      
+      local_bytes_used = bytes_allocated-local_bytes_used
 
-   end subroutine initialize_step_time_dist
+      call memWrite('step_time.f90', bytes_allocated)
+
+   end subroutine initialize_step_time
 !-------------------------------------------------------------------------------
    subroutine finalize_step_time
 
-      deallocate( dflowdt_LMloc_container )
-      deallocate( dsdt_LMloc_container, dbdt_LMloc_container )
-      deallocate( dbdt_CMB_LMloc, dxidt_LMloc_container )
-      deallocate( dsdt_Rdist_container, dxidt_Rdist_container )
-      deallocate( dbdt_Rdist_container, dflowdt_Rdist_container )
-      nullify( dbdt_dist    )
-      nullify( djdt_dist    )
-      nullify( dVxBhLM_dist )
-      nullify( dVXirLM_dist )
-      nullify( dxidt_dist   )
-      nullify( dwdt_dist    )
-      nullify( dzdt_dist    )
-      nullify( dpdt_dist    )
-      nullify( dVxVhLM_dist )
-      nullify( dsdt_dist    )
-      nullify( dVSrLM_dist  )
-      nullify( dVPrLM_dist  )
-   
-      if ( .not. l_TP_form ) deallocate( dVPrLM_LMLoc )
-      if ( .not. l_double_curl ) deallocate( dVxVhLM_LMloc )
+   nullify(dpdt_LMdist, dsdt_LMdist, dVSrLM_LMdist)
+   nullify(dxidt_LMdist, dVXirLM_LMdist)
+   nullify(dVPrLM_LMdist, dVxVhLM_LMdist)
+   nullify(dbdt_LMdist, djdt_LMdist, dVxBhLM_LMdist)
+   nullify(dwdt_LMdist, dzdt_LMdist)
 
+   nullify(dwdt_dist, dzdt_dist, dpdt_dist)
+   nullify(dVxVhLM_dist)
+   nullify(dsdt_dist, dVSrLM_dist)
+   nullify(dVPrLM_dist)
+   nullify(djdt_dist, dVxBhLM_dist)
+   nullify(dbdt_dist)
+   nullify(dxidt_dist, dVXirLM_dist)
+   
+   
+   deallocate(dbdt_CMB_LMloc)
+   deallocate(dbdt_CMB_LMdist)
+   
+   deallocate(dflowdt_LMdist_container)
+   deallocate(dsdt_LMdist_container)
+   deallocate(dxidt_LMdist_container)
+   deallocate(dbdt_LMdist_container)
+   
+   deallocate(dxidt_Rdist_container)
+   deallocate(dflowdt_Rdist_container)
+   deallocate(dsdt_Rdist_container)
+   deallocate(dbdt_Rdist_container)
+   
    end subroutine finalize_step_time
 !-------------------------------------------------------------------------------
 
@@ -573,23 +508,6 @@ contains
       else
          n_time_steps_go=n_time_steps+1  ! Last time step for output only !
       end if
-      
-!       call transform_old2new(w_LMloc       , w_LMdist        )
-!       call transform_old2new(dw_LMloc      , dw_LMdist       )
-!       call transform_old2new(ddw_LMloc     , ddw_LMdist      )
-!       call transform_old2new(xi_LMloc      , xi_LMdist       )
-!       call transform_old2new(s_LMloc       , s_LMdist        )
-!       call transform_old2new(ds_LMloc      , ds_LMdist       )
-!       call transform_old2new(z_LMloc       , z_LMdist        )
-!       call transform_old2new(dz_LMloc      , dz_LMdist       )
-!       call transform_old2new(p_LMloc       , p_LMdist        )
-!       call transform_old2new(dp_LMloc      , dp_LMdist       )
-!       call transform_old2new(dxi_LMloc     , dxi_LMdist      )
-!       call transform_old2new(dwdtLast_LMloc, dwdtLast_LMdist ) 
-!       call transform_old2new(dpdtLast_LMloc, dpdtLast_LMdist ) 
-!       call transform_old2new(dsdtLast_LMloc, dsdtLast_LMdist ) 
-      
-      
       
 #ifdef WITH_MPI
       call mpi_barrier(comm_r,ierr)
@@ -965,50 +883,6 @@ contains
             !PRINT*,"MPI_FILE_OPEN returned: ",trim(error_string)
             PERFOFF
          end if
-         if ( DEBUG_OUTPUT ) then
-            print *, "This part needs to be reviewed!", __LINE__, __FILE__
-            do nLMB=1+coord_r*nLMBs_per_rank,min((coord_r+1)*nLMBs_per_rank,nLMBs)
-               lmStart=lmStartB(nLMB)
-               lmStop=lmStopB(nLMB)
-               lmStart_00  =max(2,lmStart)
-               
-               !do nR=1,n_r_max
-               !   write(*,"(A,I2,A,2ES20.12)") "dw_LMloc for nR=",nR," is ", &
-               !        SUM( dw_LMloc(lmStart:lmStop,nR) )
-               !end do
-               write(*,"(A,I3,6ES20.12)") "start w: ",nLMB,        &
-                    & GET_GLOBAL_SUM( w_LMloc(lmStart:lmStop,:) ), &
-                    & GET_GLOBAL_SUM( dw_LMloc(lmStart:lmStop,:) ),&
-                    & GET_GLOBAL_SUM( ddw_LMloc(lmStart:lmStop,:) )
-               write(*,"(A,I3,4ES20.12)") "start z: ",nLMB,       &
-                    & GET_GLOBAL_SUM( z_LMloc(lmStart:lmStop,:) ),&
-                    & GET_GLOBAL_SUM( dz_LMloc(lmStart:lmStop,:) )
-               write(*,"(A,I3,4ES20.12)") "start s: ",nLMB,       &
-                    & GET_GLOBAL_SUM( s_LMloc(lmStart:lmStop,:) ),&
-                    & GET_GLOBAL_SUM( ds_LMloc(lmStart:lmStop,:) )
-               write(*,"(A,I3,4ES20.12)") "start p: ",nLMB,       &
-                    & GET_GLOBAL_SUM( p_LMloc(lmStart:lmStop,:) ),&
-                    & GET_GLOBAL_SUM( dp_LMloc(lmStart_00:lmStop,:) )
-               if ( l_mag ) then
-                  write(*,"(A,I3,8ES20.12)") "start b: ",nLMB,        &
-                       & GET_GLOBAL_SUM( b_LMloc(lmStart:lmStop,:) ), &
-                       & GET_GLOBAL_SUM( db_LMloc(lmStart:lmStop,:) ),&
-                       & GET_GLOBAL_SUM( ddb_LMloc(lmStart:lmStop,:) )
-                  write(*,"(A,I3,8ES20.12)") "start aj: ",nLMB,        &
-                       & GET_GLOBAL_SUM( aj_LMloc(lmStart:lmStop,:) ), &
-                       & GET_GLOBAL_SUM( dj_LMloc(lmStart:lmStop,:) ), &
-                       & GET_GLOBAL_SUM( ddj_LMloc(lmStart:lmStop,:) )
-                  write(*,"(A,I3,8ES20.12)") "start b_ic: ",nLMB,        &
-                       & GET_GLOBAL_SUM( b_ic_LMloc(lmStart:lmStop,:) ), &
-                       & GET_GLOBAL_SUM( db_ic_LMloc(lmStart:lmStop,:) ),&
-                       & GET_GLOBAL_SUM( ddb_ic_LMloc(lmStart:lmStop,:) )
-                  write(*,"(A,I3,8ES20.12)") "start aj_ic: ",nLMB,       &
-                       & GET_GLOBAL_SUM( aj_ic_LMloc(lmStart:lmStop,:) ),&
-                       & GET_GLOBAL_SUM( dj_ic_LMloc(lmStart:lmStop,:) ),&
-                       & GET_GLOBAL_SUM( ddj_ic_LMloc(lmStart:lmStop,:) )
-               end if
-            end do
-         end if
          
          !--- Now the real work starts with the radial loop that calculates
          !    the nonlinear terms:
@@ -1061,66 +935,29 @@ contains
          !
          ! gather in-place, we need allgatherV because auf the unequal
          ! number of points on the processes (last block is one larger)
-
-         if ( DEBUG_OUTPUT ) then
-            print *, "This part needs to be reviewed!", __LINE__, __FILE__
-            nR_i1=max(1,l_r)
-            nR_i2=min(n_r_max,u_r)
-            write(*,"(A,10ES20.12)") "middl: dwdt,dsdt,dzdt,dpdt = ",&
-                 & get_global_sum_dist( dwdt_dist(1:n_lm_loc,nR_i1:nR_i2) ),       &
-                 & get_global_sum_dist( dsdt_dist(1:n_lm_loc,nR_i1:nR_i2) ),       &
-                 & get_global_sum_dist( dzdt_dist(1:n_lm_loc,nR_i1:nR_i2) ),       &
-                 & get_global_sum_dist( dpdt_dist(1:n_lm_loc,nR_i1:nR_i2) ),       &
-                 & get_global_sum_dist( dVSrLM_dist(1:n_lm_loc,:) )
-            if ( l_mag ) then
-               write(*,"(A,6ES20.12)") "middl: dbdt,djdt,dVxBhLM = ",&
-                    & get_global_sum_dist( dbdt_dist(1:n_lm_loc,nR_i1:nR_i2) ),    &
-                    & get_global_sum_dist( djdt_dist(1:n_lm_loc,nR_i1:nR_i2) ),    &
-                    & get_global_sum_dist( dVxBhLM_dist(1:n_lm_loc,:) )
-            end if
-         end if
-         ! ===================================== BARRIER =======================
-         !PERFON('barr_rad')
-         !call MPI_Barrier(comm_r,ierr)
-         !PERFOFF
-         ! =====================================================================
+         
          if ( lVerbose ) write(*,*) "! start r2lo redistribution"
          
-         !!!!!!!!TODO TERRIBLE PERFORMANCE BECAUSE OF THE TRANSFORM OLD2NEW!!!!!!!!!
          PERFON('r2lo_dst')
          if ( l_conv .or. l_mag_kin ) then
-            call r2lo_redist_start_dist(r2lo_flow,dflowdt_Rdist_container,dflowdt_LMloc_container)
-            call r2lo_redist_wait(r2lo_flow)
-            call transform_old2new(dwdt_LMloc, dwdt_LMdist )
-            call transform_old2new(dzdt_LMloc, dzdt_LMdist )
-            call transform_old2new(dpdt_LMloc, dpdt_LMdist )
-            if ( l_double_curl ) call transform_old2new(dVxVhLM_LMloc, dVxVhLM_LMdist)
+            call r2lm_dflowdt%start(dflowdt_Rdist_container, dflowdt_LMdist_container, size(dflowdt_Rdist_container,3))
+            call r2lm_dflowdt%wait()
          end if
 
          if ( l_heat ) then
-            call r2lo_redist_start_dist(r2lo_s,dsdt_Rdist_container,dsdt_LMloc_container)
-            call r2lo_redist_wait(r2lo_s)
-            call transform_old2new(dsdt_LMloc,   dsdt_LMdist  )
-            call transform_old2new(dVSrLM_LMloc, dVSrLM_LMdist)
-            if (l_TP_form) call transform_old2new(dVPrLM_LMloc,  dVPrLM_LMdist)
-            
+            call r2lm_dsdt%start(dsdt_Rdist_container, dsdt_LMdist_container, size(dsdt_Rdist_container,3))
+            call r2lm_dsdt%wait()
          end if
 
          if ( l_chemical_conv ) then
-            call r2lo_redist_start_dist(r2lo_xi,dxidt_Rdist_container,dxidt_LMloc_container)
-            call r2lo_redist_wait(r2lo_xi)
-            call transform_old2new(dxidt_LMloc,   dxidt_LMdist   )
-            call transform_old2new(dVXirLM_LMloc, dVXirLM_LMdist )
+            call r2lm_dxidt%start(dxidt_Rdist_container, dxidt_LMdist_container, size(dxidt_Rdist_container,3))
+            call r2lm_dxidt%wait()
          end if
 
          if ( l_mag ) then
-            call r2lo_redist_start_dist(r2lo_b,dbdt_Rdist_container,dbdt_LMloc_container)
-            call r2lo_redist_wait(r2lo_b)
-            call transform_old2new(dbdt_LMloc,    dbdt_LMdist   )
-            call transform_old2new(djdt_LMloc,    djdt_LMdist   )
-            call transform_old2new(dVxBhLM_LMloc, dVxBhLM_LMdist)
+            call r2lm_dbdt%start(dbdt_Rdist_container, dbdt_LMdist_container, size(dbdt_Rdist_container,3))
+            call r2lm_dbdt%wait()
          end if
-         !!!!!!!!TODO TERRIBLE PERFORMANCE BECAUSE OF THE TRANSFORM OLD2NEW!!!!!!!!!
          
 #ifdef WITH_MPI
          ! ------------------
@@ -1133,45 +970,6 @@ contains
 #endif
          PERFOFF
          if ( lVerbose ) write(*,*) "! r2lo redistribution finished"
-
-         if ( DEBUG_OUTPUT ) then
-            print *, "This part needs to be reviewed!", __LINE__, __FILE__
-            write(*,"(A,8ES20.12)")                                           &
-                 & "lo_arr middl: dzdt_LMloc,z_LMloc,dz_LMloc,dzdtLast_lo = ",&
-                 & GET_GLOBAL_SUM( dzdt_LMloc(:,2:n_r_max-1) ),               &
-                 & GET_GLOBAL_SUM( z_LMloc ),GET_GLOBAL_SUM( dz_LMloc ),      &
-                 & GET_GLOBAL_SUM( dzdtLast_lo )
-            write(*,"(A,8ES20.12)") "lo_arr middl: dsdt,s,ds,dsdtLast = ", &
-                 & GET_GLOBAL_SUM( dsdt_LMloc(:,2:n_r_max-1) ),            &
-                 & GET_GLOBAL_SUM( s_LMloc ),GET_GLOBAL_SUM( ds_LMloc ),   &
-                 & GET_GLOBAL_SUM( dsdtLast_LMloc )
-            write(*,"(A,10ES20.12)")                            &
-                 & "lo_arr middl: dwdt,w,dw,ddw,dwdtLast = ",   &
-                 & GET_GLOBAL_SUM( dwdt_LMloc(:,2:n_r_max-1) ), &
-                 & GET_GLOBAL_SUM( w_LMloc ),                   &
-                 & GET_GLOBAL_SUM( dw_LMloc ),                  &
-                 & GET_GLOBAL_SUM( ddw_LMloc ),                 &
-                 & GET_GLOBAL_SUM( dwdtLast_LMloc )
-            if ( l_mag ) then
-               write(*,"(A,10ES20.12)")                            &
-                    &"lo_arr middl: dbdt,b,db,ddb,dbdtLast = ",    &
-                    & GET_GLOBAL_SUM( dbdt_LMloc(:,2:n_r_max-1) ), &              
-                    & GET_GLOBAL_SUM( b_LMloc ),                   &
-                    & GET_GLOBAL_SUM( db_LMloc ),                  &
-                    & GET_GLOBAL_SUM( ddb_LMloc ),                 &
-                    & GET_GLOBAL_SUM( dbdtLast_LMloc )
-               write(*,"(A,12ES20.12)")                                     &
-                    & "lo_arr middl: djdt,aj,dj,ddj,djdtLast,dVxBhLM = ",   &
-                    & GET_GLOBAL_SUM( djdt_LMloc(:,2:n_r_max-1) ),          &
-                    & GET_GLOBAL_SUM( aj_LMloc ),GET_GLOBAL_SUM( dj_LMloc ),&
-                    & GET_GLOBAL_SUM( ddj_LMloc ),                          &
-                    & GET_GLOBAL_SUM( djdtLast_LMloc ),                     &
-                    & GET_GLOBAL_SUM( dVxBhLM_LMloc )
-            end if
-            write(*,"(A,2ES20.12)") "middl: dtrkc,dthkc = ", &
-                  SUM(dtrkc_Rloc),SUM(dthkc_Rloc)
-         end if
-         !PERFOFF
 
          !--- Output before update of fields in LMLoop:
          ! =================================== BARRIER ======================
@@ -1354,9 +1152,9 @@ contains
             l_AB1 = .false.
          end if
          
-!          PERFON('gat_aj')
+         PERFON('gat_aj')
          call gather_all  !Just gathers aj_nl_cmb and some other similar dudes!
-!          PERFOFF
+         PERFOFF
          
 !          call LMLoop(w1,coex,time,dt,lMat,lRmsNext,lPressNext,dVxVhLM_LMloc, &
 !               &      dVxBhLM_LMloc,dVSrLM_LMloc,dVPrLM_LMloc,dVXirLM_LMloc,  &
@@ -1367,7 +1165,6 @@ contains
          call LMLoop_new(w1,coex,time,dt,lMat,lRmsNext,lPressNext,dVxVhLM_LMdist, &
               &      dVSrLM_LMdist, dsdt_LMdist,dwdt_LMdist,dzdt_LMdist,dpdt_LMdist,&
               &      lorentz_torque_ma,lorentz_torque_ic)
-!          print '(A,3G10.3)', "~~~~~Ω~~~~~> ", ABS(SUM(z_LMdist)), ABS(SUM(dzdt_LMdist))
 
          if ( lVerbose ) write(*,*) '! lm-loop finished!'
          call wallTime(runTimeRstop)
@@ -1378,45 +1175,7 @@ contains
             call addTime(runTimeLM,runTimePassed)
          end if
          
-         if (DEBUG_OUTPUT) then
-            write(*,"(A,6ES20.12)") "lo_arr end: z_LMloc,dz_LMloc,dzdtLast_lo = ",&
-                 & GET_GLOBAL_SUM( z_LMloc ),               &
-                 & GET_GLOBAL_SUM( dz_LMloc ),              &
-                 & GET_GLOBAL_SUM( dzdtLast_lo )
-            write(*,"(A,6ES20.12)") "lo_arr end: s,ds,dsdtLast = ",&
-                 & GET_GLOBAL_SUM( s_LMloc ),                      &
-                 & GET_GLOBAL_SUM( ds_LMloc ),                     &
-                 & GET_GLOBAL_SUM( dsdtLast_LMloc )
-            write(*,"(A,6ES20.12)") "lo_arr end: w,dw,dwdtLast = ",&
-                 & GET_GLOBAL_SUM( w_LMloc ),                      &
-                 & GET_GLOBAL_SUM( dw_LMloc ),                     &
-                 & GET_GLOBAL_SUM( dwdtLast_LMloc )
-            write(*,"(A,4ES20.12)") "w(bnd_r) = ",            &
-                 & GET_GLOBAL_SUM( w_LMloc(:,n_r_icb) ),      &
-                 & GET_GLOBAL_SUM( w_LMloc(:,n_r_cmb) )
-            write(*,"(A,6ES20.12)") "lo_arr end: p,dpdtLast = ",&
-                 & GET_GLOBAL_SUM( p_LMloc ),                   &
-                 & GET_GLOBAL_SUM( dpdtLast_LMloc )
-            write(*,"(A,6ES20.12)") "lo_arr end: b,db,dbdtLast = ",&
-                 & GET_GLOBAL_SUM( b_LMloc ),                      &
-                 & GET_GLOBAL_SUM( db_LMloc ),                     &
-                 & GET_GLOBAL_SUM( dbdtLast_LMloc )
-            write(*,"(A,6ES20.12)") "lo_arr end: aj,dj,djdtLast = ",&
-                 & GET_GLOBAL_SUM( aj_LMloc ),                      &
-                 & GET_GLOBAL_SUM( dj_LMloc ),                      &
-                 & GET_GLOBAL_SUM( djdtLast_LMloc )
-         end if
-         
          !----- Timing and info of advancement:
-         ! =================================== BARRIER ======================
-         !start_time=MPI_Wtime()
-         !PERFON('barr_lm')
-         !call MPI_Barrier(comm_r,ierr)
-         !PERFOFF
-         !end_time=MPI_Wtime()
-         !write(*,"(A,I4,A,F10.6,A)") " lm barrier on coord_r ",coord_r,&
-         !     & " takes ",end_time-start_time," s."
-         ! ==================================================================
          call wallTime(runTimeTstop)
          if ( .not.lNegTime(runTimeTstart,runTimeTstop) ) then
             call subTime(runTimeTstart,runTimeTstop,runTimePassed)

@@ -107,7 +107,22 @@ use blocking
    
    type(ml2r_transp), public :: ml2r_flow, ml2r_s
    type(ml2r_transp), public :: ml2r_field, ml2r_xi
-   !--
+   
+   !-- Radial to ML transposition object
+   !
+   !   Author: Rafael Lago (MPCDF) October 2019
+   !   
+   type, public :: r2lm_transp
+      integer, pointer :: sends(:), recvs(:)
+      integer, pointer :: rq(:)
+      contains
+        final :: deallocate_r2lm_transp
+        procedure :: wait  => transpose_r2lm_wait
+        procedure :: start => transpose_r2lm_start
+   end type r2lm_transp
+   
+   type(r2lm_transp), public :: r2lm_dflowdt, r2lm_dsdt, &
+        &             r2lm_dxidt, r2lm_dbdt
    
    !-- Slice/gather interface
    !   
@@ -131,35 +146,60 @@ use blocking
              
 contains
 
-   !----------------------------------------------------------------------------
-   function allocate_ml2r_transp() result(ml2r_obj)
-      !   
-      !   Initialize the MPI types for the transposition from ML to Radial
-      !   
-      !   Author: Rafael Lago (MPCDF) January 2018
-      !   
-      type(ml2r_transp) :: ml2r_obj
+   !-- Constructor
+   !   
+   !   Initialize the MPI types for the transposition from ML to Radial
+   !   
+   !   Author: Rafael Lago (MPCDF) January 2018
+   !   
+   function allocate_ml2r_transp() result(self)
+      type(ml2r_transp) :: self
       integer :: nsends, nrecvs
       nsends = size(ml2r_dests)
       nrecvs = size(ml2r_sources)
       
-      allocate(ml2r_obj%rq(nsends+nrecvs))
-      ml2r_obj%sends => ml2r_obj%rq(1:nsends)
-      ml2r_obj%recvs => ml2r_obj%rq(nsends+1:nrecvs)
+      allocate(self%rq(nsends+nrecvs))
+      self%sends => self%rq(1:nsends)
+      self%recvs => self%rq(nsends+1:nrecvs)
       
-      ml2r_obj%rq = MPI_REQUEST_NULL
+      self%rq = MPI_REQUEST_NULL
    end function allocate_ml2r_transp
    
-   !----------------------------------------------------------------------------
-   subroutine deallocate_ml2r_transp(ml2r_obj)
-      !   
-      !   Author: Rafael Lago (MPCDF) January 2018
-      !    
-      type(ml2r_transp), intent(inout) :: ml2r_obj
-      nullify(ml2r_obj%sends)
-      nullify(ml2r_obj%recvs)
-      nullify(ml2r_obj%rq)
+   subroutine deallocate_ml2r_transp(self)
+      type(ml2r_transp), intent(inout) :: self
+      nullify(self%sends)
+      nullify(self%recvs)
+      nullify(self%rq)
    end subroutine deallocate_ml2r_transp
+   
+   !-- Constructor
+   !   
+   !   Initialize the MPI types for the transposition from Radial to LM
+   !   
+   !   Author: Rafael Lago (MPCDF) January 2018
+   !   
+   function allocate_r2lm_transp() result(self)
+      type(r2lm_transp) :: self
+      integer :: nsends, nrecvs
+      nsends = size(ml2r_dests)
+      nrecvs = size(ml2r_sources)
+      
+      allocate(self%rq(nsends+nrecvs))
+      self%sends => self%rq(1:nsends)
+      self%recvs => self%rq(nsends+1:nrecvs)
+      
+      self%rq = MPI_REQUEST_NULL
+   end function allocate_r2lm_transp
+   
+   subroutine deallocate_r2lm_transp(self)
+      !   
+      !   Author: Rafael Lago (MPCDF) October 2019
+      !    
+      type(r2lm_transp), intent(inout) :: self
+      nullify(self%sends)
+      nullify(self%recvs)
+      nullify(self%rq)
+   end subroutine deallocate_r2lm_transp
 
    !----------------------------------------------------------------------------
    subroutine initialize_ml2r_tranposition
@@ -342,10 +382,15 @@ contains
    !   Author: Rafael Lago (MPCDF) January 2018
    !   
       call initialize_ml2r_tranposition
-      ml2r_s = allocate_ml2r_transp()
-      ml2r_flow = allocate_ml2r_transp()
+      ml2r_s     = allocate_ml2r_transp()
+      ml2r_flow  = allocate_ml2r_transp()
       ml2r_field = allocate_ml2r_transp()
-      ml2r_xi = allocate_ml2r_transp()
+      ml2r_xi    = allocate_ml2r_transp()
+      
+      r2lm_dflowdt = allocate_r2lm_transp()
+      r2lm_dsdt    = allocate_r2lm_transp()
+      r2lm_dxidt   = allocate_r2lm_transp()
+      r2lm_dbdt    = allocate_r2lm_transp()
    end subroutine initialize_communications_new
   
    subroutine initialize_communications
@@ -1957,15 +2002,12 @@ contains
       
    end subroutine gather_f
    
-   !----------------------------------------------------------------------------
+   !-- General-purpose transposition. All the customization should happen 
+   !   during the creation of the types!
+   !
+   !   Author: Rafael Lago (MPCDF) January 2018
+   !   
    subroutine transpose_ml2r_start(self, container_ml, container_rm, n_fields)
-      !   
-      !   This is supposed to be a general-purpose transposition. All the 
-      !   customization should happen during the creation of the types!
-      !
-      !   Author: Rafael Lago (MPCDF) January 2018
-      !   
-      !   
       class(ml2r_transp), intent(inout) :: self
       integer,            intent(in)    :: n_fields
       complex(cp),        intent(inout) :: container_rm(n_lm_loc, l_r:u_r, n_fields)
@@ -1996,25 +2038,66 @@ contains
       
    end subroutine transpose_ml2r_start
    
-   !----------------------------------------------------------------------------
+   !
+   !   Author: Rafael Lago (MPCDF) January 2018
+   !   
    subroutine transpose_ml2r_wait(self)
-      !
-      !   Author: Rafael Lago (MPCDF) January 2018
-      !   
       class(ml2r_transp), intent(inout) :: self
       call mpi_waitall(size(self%rq),self%rq,MPI_STATUSES_IGNORE,ierr)
    end subroutine transpose_ml2r_wait
    
-   !----------------------------------------------------------------------------
+   
+   !-- General-purpose transposition. All the customization should happen 
+   !   during the creation of the types!
+   !
+   !   Author: Rafael Lago (MPCDF) October 2019
+   !   
+   subroutine transpose_r2lm_start(self, container_rm, container_ml, n_fields)
+      class(r2lm_transp), intent(inout) :: self
+      integer,            intent(in)    :: n_fields
+      complex(cp),        intent(inout) :: container_ml(n_mlo_loc, n_r_max, n_fields)
+      complex(cp),        intent(in)    :: container_rm(n_lm_loc, l_r:u_r, n_fields)
+      
+      integer :: i, j, k, icoord_mlo, icoord_r, il_r, ierr
+      
+      !-- Starts the receives
+      do j=1,size(ml2r_sources)
+         icoord_mlo = ml2r_sources(j)
+         call mpi_isend(container_rm, n_fields, ml2r_r_type(j), icoord_mlo, 1, comm_mlo, self%recvs(j), ierr)
+      end do
+      
+      !-- Starts the sends
+      do j=1,size(ml2r_dests)
+         icoord_mlo = ml2r_dests(j)
+         icoord_r = cart%mlo2lmr(icoord_mlo,2)
+         il_r = dist_r(icoord_r,1)
+         call mpi_irecv(container_ml(1,il_r,1), n_fields, ml2r_s_type(j), icoord_mlo, 1, comm_mlo, self%sends(j), ierr)
+      end do
+      
+      !-- Copies data which is already local
+      do i=1,size(ml2r_loc_dspl,1)
+         k = ml2r_loc_dspl(i,1)
+         j = ml2r_loc_dspl(i,2)
+         container_ml(k,l_r:u_r,1:n_fields) = container_rm(j,l_r:u_r,1:n_fields)
+      end do
+   end subroutine transpose_r2lm_start
+   
+   !
+   !   Author: Rafael Lago (MPCDF) October 2019
+   !   
+   subroutine transpose_r2lm_wait(self)
+      class(r2lm_transp), intent(inout) :: self
+      call mpi_waitall(size(self%rq),self%rq,MPI_STATUSES_IGNORE,ierr)
+   end subroutine transpose_r2lm_wait
+   
+   !-- Transposition from (m_loc,θ_glb) to (θ_loc,m_glb).
+   !   
+   !   
+   !   Author: Rafael Lago (MPCDF) August 2017
+   !
+   !-- TODO this with mpi_type to stride the data
+   !
    subroutine transpose_m_theta(f_m_theta, f_theta_m)
-      !   
-      !   Transposition from (m_loc,θ_glb) to (θ_loc,m_glb).
-      !   
-      !   
-      !   Author: Rafael Lago (MPCDF) August 2017
-      !
-      !-- TODO this with mpi_type to stride the data
-      !
       complex(cp), intent(inout) :: f_m_theta(n_m_max, n_theta_loc)
       complex(cp), intent(inout) :: f_theta_m(n_theta_max, n_m_loc)
       
@@ -2055,15 +2138,13 @@ contains
       
    end subroutine transpose_m_theta
    
-   !----------------------------------------------------------------------------
+   !-- Transposition from (θ_loc,m_glb) to (m_loc,θ_glb)
+   !   
+   !   Author: Rafael Lago (MPCDF) August 2017
+   !
+   !-- TODO this with mpi_type to stride the data
+   !
    subroutine transpose_theta_m(f_theta_m, f_m_theta)
-      !   
-      !   Transposition from (θ_loc,m_glb) to (m_loc,θ_glb)
-      !   
-      !   Author: Rafael Lago (MPCDF) August 2017
-      !
-      !-- TODO this with mpi_type to stride the data
-      !
       complex(cp), intent(inout) :: f_theta_m(n_theta_max, n_m_loc)
       complex(cp), intent(inout) :: f_m_theta(n_m_max, n_theta_loc)
       
