@@ -1,6 +1,6 @@
 #!/bin/sh
 
-ver="3.2.2-r675"
+ver="3.3-r691"
 
 if test ! -d $HOME/local; then
     mkdir $HOME/local
@@ -42,11 +42,11 @@ else
    fi
 fi
 
-opts="--enable-magic-layout --prefix=$HOME/local"
+opts="--enable-magic-layout --prefix=$HOME/local --enable-ishioka"
 if [[ -n $MKLROOT ]]
 then
    echo "MKL found, installing with MKL"
-   opts="$opts -enable-mkl"
+   opts="$opts --enable-mkl"
 else
    echo "MKL not found, will try to install with FFTW"
 fi
