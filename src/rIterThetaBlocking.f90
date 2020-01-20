@@ -1,10 +1,6 @@
 #include "perflib_preproc.cpp"
 module rIterThetaBlocking_mod
 
-#ifdef WITH_LIKWID
-#include "likwid_f90.h"
-#endif
-
    use rIteration_mod, only: rIteration_t
    use precision_mod
    use mem_alloc, only: bytes_allocated
@@ -113,19 +109,14 @@ contains
       integer :: nTheta
       logical :: DEBUG_OUTPUT=.false.
 
-      PERFON('sp2lm')
       !----- Legendre transform from (r,l,m) to (r,theta,m):
       !      First version with PlmTF needed for first-touch policy
       if ( l_mag ) then
-         !PERFON('legTFG')
-         !LIKWID_ON('legTFG')
          call legTFG(this%nBc,this%lDeriv,nThetaStart,gsa%vrc,gsa%vtc,  &
               &      gsa%vpc,gsa%dvrdrc,gsa%dvtdrc,gsa%dvpdrc,gsa%cvrc, &
               &      gsa%dvrdtc,gsa%dvrdpc,gsa%dvtdpc,gsa%dvpdpc,       &
               &      gsa%brc,gsa%btc,gsa%bpc,gsa%cbrc,                  &
               &      gsa%cbtc, gsa%cbpc, this%leg_helper)
-         !LIKWID_OFF('legTFG')
-         !PERFOFF
          if (DEBUG_OUTPUT) then
             do nTheta=1,this%sizeThetaB
                write(*,"(2I3,A,6ES20.12)") this%nR,nTheta,": sum v = ",&
@@ -133,14 +124,10 @@ contains
             end do
          end if
       else
-         !PERFON('legTFGnm')
-         !LIKWID_ON('legTFGnm')
          call legTFGnomag(this%nBc,this%lDeriv,nThetaStart,gsa%vrc,gsa%vtc, &
               &           gsa%vpc,gsa%dvrdrc,gsa%dvtdrc,gsa%dvpdrc,gsa%cvrc,&
               &           gsa%dvrdtc,gsa%dvrdpc,gsa%dvtdpc,gsa%dvpdpc,      &
               &           this%leg_helper)
-         !LIKWID_OFF('legTFGnm')
-         !PERFOFF
       end if
 
       if ( l_heat ) then
@@ -267,7 +254,6 @@ contains
             call fft_thetab(gsa%cbpc,1)
          end if
       end if
-      PERFOFF
 
    end subroutine transform_to_grid_space
 !-------------------------------------------------------------------------------
@@ -281,10 +267,8 @@ contains
       ! Local variables
       integer :: nTheta,nPhi
   
-      PERFON('lm2sp')
       if ( (.not.this%isRadialBoundaryPoint .or. this%lRmsCalc) .and. &
             ( l_conv_nl .or. l_mag_LF ) ) then
-         !PERFON('inner1')
          if ( l_conv_nl .and. l_mag_LF ) then
             if ( this%nR>n_r_LCR ) then
                do nTheta=1,this%sizeThetaB
@@ -343,10 +327,8 @@ contains
             call legTF3(nThetaStart,nl_lm%LFrLM,nl_lm%LFtLM,nl_lm%LFpLM,    &
                  &      gsa%LFr,gsa%LFt,gsa%LFp)
          end if
-         !PERFOFF
       end if
       if ( (.not.this%isRadialBoundaryPoint) .and. l_heat ) then
-         !PERFON('inner2')
          if ( .not. l_axi ) then
             call fft_thetab(gsa%VSr,-1)
             call fft_thetab(gsa%VSt,-1)
@@ -367,7 +349,6 @@ contains
                call legTF1(nThetaStart,nl_lm%ViscHeatLM,gsa%ViscHeat)
             end if
          end if
-         !PERFOFF
       end if
       if ( (.not.this%isRadialBoundaryPoint) .and. l_TP_form ) then
          if ( .not. l_axi ) then
@@ -385,7 +366,6 @@ contains
               &      gsa%VXir,gsa%VXit,gsa%VXip)
       end if
       if ( l_mag_nl ) then
-         !PERFON('mag_nl')
          if ( .not.this%isRadialBoundaryPoint .and. this%nR>n_r_LCR ) then
             if ( .not. l_axi ) then
                call fft_thetab(gsa%VxBr,-1)
@@ -402,7 +382,6 @@ contains
             call legTF2(nThetaStart,nl_lm%VxBtLM,nl_lm%VxBpLM,   &
                  &      gsa%VxBt,gsa%VxBp)
          end if
-         !PERFOFF
       end if
 
       if ( this%lRmsCalc ) then
@@ -435,7 +414,6 @@ contains
                  &               gsa%LFp2,gsa%LFt2)
          end if
       end if
-      PERFOFF
 
    end subroutine transform_to_lm_space
 !-------------------------------------------------------------------------------

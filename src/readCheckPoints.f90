@@ -255,7 +255,6 @@ contains
          bytes_allocated = bytes_allocated + 4*n_data_oldP*SIZEOF_DEF_COMPLEX
          ! end of allocation
        
-         !PERFON('mD_rd')
          if ( lreadXi ) then
             allocate(xio(n_data_oldP))
             bytes_allocated = bytes_allocated + n_data_oldP*SIZEOF_DEF_COMPLEX
@@ -272,7 +271,6 @@ contains
                read(n_start_file) wo, zo, po
             end if
          end if
-         !PERFOFF
 
       end if ! coord_r == 0
 
@@ -355,7 +353,6 @@ contains
                read(n_start_file) wo,zo,po
             end if
          end if
-         !PERFOFF
        
          call mapDataHydro( wo,zo,po,so,xio,r_old,lm2lmo,n_r_max_old,  &
               &             lm_max_old,n_r_maxL,.true.,.true.,.true.,  &
@@ -1583,7 +1580,6 @@ contains
       if (rank == 0) write(*,"(A,I12)") "maximal allocated bytes in mapData are ",&
                      bytes_allocated
 
-      !PERFON('mD_map')
       do nLMB=1,nLMBs ! Blocking of loop over all (l,m)
          lmStart=lmStartB(nLMB)
          lmStop =lmStopB(nLMB)
@@ -1651,7 +1647,6 @@ contains
             end if
          end do
       end do
-      !PERFOFF
       !PRINT*,omp_get_thread_num(),": After nLMB loop"
       deallocate(woR,zoR,poR)
       bytes_allocated = bytes_allocated - 3*n_r_maxL*SIZEOF_DEF_COMPLEX
@@ -1693,7 +1688,6 @@ contains
       if (rank == 0) write(*,"(A,I12)") "maximal allocated bytes in mapData are ",&
                      bytes_allocated
 
-      !PERFON('mD_map')
       do nLMB=1,nLMBs ! Blocking of loop over all (l,m)
          lmStart=lmStartB(nLMB)
          lmStop =lmStopB(nLMB)
@@ -1739,7 +1733,6 @@ contains
             end if
          end do
       end do
-      !PERFOFF
       !PRINT*,omp_get_thread_num(),": After nLMB loop"
       deallocate(woR,zoR,poR,soR)
       bytes_allocated = bytes_allocated - 4*n_r_maxL*SIZEOF_DEF_COMPLEX

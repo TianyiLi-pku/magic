@@ -54,8 +54,7 @@ contains
       integer :: runHours,runMinutes,runSeconds
       
       namelist/parallel/n_ranks_r,n_ranks_theta,  &
-         & n_ranks_r, n_ranks_m, n_ranks_lo,      &
-         & n_ranks_mo
+         & mlo_dist_method
       
       namelist/grid/n_r_max,n_cheb_max,n_phi_tot,n_theta_axi, &
          &  n_r_ic_max,n_cheb_ic_max,minc,nalias,l_axi,       &
@@ -129,7 +128,7 @@ contains
          & l_PressGraph,l_energy_modes,m_max_modes,l_probe,   &
          & r_probe,theta_probe,n_phi_probes,n_probe_step,     &
          & n_probe_out,t_probe_start,t_probe_stop,dt_probe,   &
-         & l_earth_likeness,l_max_comp
+         & l_earth_likeness,l_max_comp, l_verb_paral
 
       namelist/mantle/conductance_ma,nRotMa,rho_ratio_ma, &
          & omega_ma1,omegaOsz_ma1,tShift_ma1,             &
@@ -158,7 +157,6 @@ contains
 
       !-- Set default values of control parameters:
       call defaultNamelists
-
 
       ! get the filename of the input file as the last argument from the command line
       argument_count = command_argument_count()
@@ -780,6 +778,7 @@ contains
       write(n_out,*) "&parallel"
       write(n_out,'(''  n_ranks_r        ='',i5,'','')') n_ranks_r
       write(n_out,'(''  n_ranks_theta    ='',i5,'','')') n_ranks_theta
+      write(n_out,'(''  mlo_dist_method  ='',A,'','')') mlo_dist_method
 
       write(n_out,*) " "
       write(n_out,*) "&grid"
@@ -1068,7 +1067,8 @@ contains
       write(n_out,'(''  l_save_out      ='',l3,'','')') l_save_out
       write(n_out,'(''  l_true_time     ='',l3,'','')') l_true_time
       write(n_out,'(''  lVerbose        ='',l3,'','')') lVerbose
-      write(n_out,'(''  l_r_MagSpec      ='',l3,'','')') l_r_MagSpec
+      write(n_out,'(''  l_verb_paral    ='',l3,'','')') l_verb_paral
+      write(n_out,'(''  l_r_MagSpec     ='',l3,'','')') l_r_MagSpec
       write(n_out,'(''  l_DTrMagSpec    ='',l3,'','')') l_DTrMagSpec
       write(n_out,'(''  l_max_cmb       ='',i3,'','')') l_max_cmb
       write(n_out,'(''  l_r_field       ='',l3,'','')') l_r_field
@@ -1158,6 +1158,7 @@ contains
       n_ranks_m     = 0
       n_ranks_lo    = 0
       n_ranks_mo    = 0
+      mlo_dist_method = "mfirst"
       
       !----- Namelist grid
       ! must be of form 4*integer+1
@@ -1524,6 +1525,8 @@ contains
          t_probe     =-one
       end do
 
+      l_verb_paral = .false. ! Extra info about parallelism
+      
       !----- Magnetic spectra for different depths
       !      at times of log output or movie frames:
       l_r_MagSpec    =.false.

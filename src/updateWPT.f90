@@ -227,7 +227,6 @@ contains
       !$OMP END PARALLEL
 
 
-      !PERFON('upWP_ssol')
       !$OMP PARALLEL default(shared) &
       !$OMP private(nLMB2,lm,lm1,l1,m1,lmB)
       !write(*,"(I3,A)") omp_get_thread_num(),": before SINGLE"
@@ -269,7 +268,6 @@ contains
             !$OMP private(lmB0,lmB,lm,lm1,m1,nR,n_r_out) &
             !$OMP private(threadid)
 
-            !PERFON('upWP_set')
 #ifdef WITHOMP
             threadid = omp_get_thread_num()
 #else
@@ -334,9 +332,7 @@ contains
                   end do
                end if
             end do
-            !PERFOFF
 
-            !PERFON('upWP_sol')
             if ( lmB > 0 ) then
 
                ! use the mat_fac(:,1) to scale the rhs
@@ -355,7 +351,6 @@ contains
                   end do
                end do
             end if
-            !PERFOFF
 
             if ( lRmsNext ) then ! Store old w
                do nR=1,n_r_max
@@ -366,7 +361,6 @@ contains
                end do
             end if
 
-            !PERFON('upWP_aft')
             lmB=lmB0
             do lm=lmB0+1,min(iChunk*chunksize,sizeLMB2(nLMB2,nLMB))
                lm1=lm22lm(lm,nLMB2,nLMB)
@@ -397,14 +391,12 @@ contains
                   end if
                end if
             end do
-            !PERFOFF
             !$OMP END TASK
          end do
          !$OMP END TASK
       end do   ! end of loop over l1 subblocks
       !$OMP END SINGLE
       !$OMP END PARALLEL
-      !PERFOFF
       !write(*,"(A,I3,4ES22.12)") "w,p after: ",nLMB,get_global_SUM(w),get_global_SUM(p)
 
       !-- set cheb modes > rscheme_oc%n_max to zero (dealiazing)
@@ -417,7 +409,6 @@ contains
       end do
 
 
-      !PERFON('upWP_drv')
       all_lms=lmStop-lmStart+1
 #ifdef WITHOMP
       if (all_lms < omp_get_max_threads()) then
@@ -469,7 +460,6 @@ contains
 #ifdef WITHOMP
       call omp_set_num_threads(omp_get_max_threads())
 #endif
-      !PERFOFF
 
       if ( lRmsNext ) then
          n_r_top=n_r_cmb

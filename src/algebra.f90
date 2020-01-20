@@ -6,10 +6,6 @@ module algebra
    use constants, only: one
    use useful, only: abortRun
 
-#ifdef WITH_LIKWID
-#include "likwid_f90.h"
-#endif
-
    implicit none
 
    private
@@ -116,7 +112,6 @@ contains
       noddRHS= mod(nRHSs,2)
 
       !     permute vectors bc
-      LIKWID_ON('perm')
       do nRHS=1,nRHSs
          do k=1,nm1
             m=ip(k)
@@ -125,17 +120,14 @@ contains
             bc(k,nRHS) =help
          end do
       end do
-      LIKWID_OFF('perm')
 
       !     solve  l * y = b
 
-      LIKWID_ON('cgeslML_1')
       !write(*,"(A,I4,A,I2,A)") "OpenMP loop over ",(nRHSs-1)/2,&
       !     &" iterations on ",omp_get_num_threads()," threads"
       do nRHS=1,nRHSs-1,2
          nRHS2=nRHS+1
 
-         !PERFON('sol_1')
          do k=1,n-2,2
             k1=k+1
             bc(k1,nRHS) =bc(k1,nRHS)-bc(k,nRHS)*a(k1,k)
@@ -149,9 +141,7 @@ contains
             bc(n,nRHS) =bc(n,nRHS) -bc(nm1,nRHS)*a(n,nm1)
             bc(n,nRHS2)=bc(n,nRHS2)-bc(nm1,nRHS2)*a(n,nm1)
          end if
-         !PERFOFF
          !     solve  u * x = y
-         !PERFON('sol_2')
          do k=n,3,-2
             k1=k-1
             bc(k,nRHS)  =bc(k,nRHS)*a(k,k)
@@ -172,7 +162,6 @@ contains
             bc(1,nRHS)=bc(1,nRHS)*a(1,1)
             bc(1,nRHS2)=bc(1,nRHS2)*a(1,1)
          end if
-         !PERFOFF
 
       end do
 
@@ -203,7 +192,6 @@ contains
          end if
 
       end if
-      LIKWID_OFF('cgeslML_1')
 
    end subroutine solve_mat_complex_rhs_multi
 !-----------------------------------------------------------------------------

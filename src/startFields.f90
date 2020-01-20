@@ -80,7 +80,6 @@ contains
     
       integer :: ierr, filehandle
     
-      !PERFON('getFlds')
       !print*,"Starting getStartFields"
       !write(*,"(2(A,L1))") "l_conv=",l_conv,", l_heat=",l_heat
       !---- Computations for the Nusselt number if we are anelastic
@@ -229,7 +228,6 @@ contains
             dsdtLast_LMloc(:,:)=zero
          end if
 
-            !PERFOFF
       else ! If there's no restart file
 
          ! Initialize with zero
@@ -536,7 +534,6 @@ contains
       end if
       
       !print*,"End of getStartFields"
-      !PERFOFF
    end subroutine getStartFields
 !------------------------------------------------------------------------------
 end module start_fields

@@ -1,10 +1,6 @@
 #include "perflib_preproc.cpp"
 module updateB_mod
 
-#ifdef WITH_LIKWID
-#include "likwid_f90.h"
-#endif
-
    use omp_lib
    use precision_mod
    use mem_alloc, only: bytes_allocated
@@ -260,7 +256,6 @@ contains
       ! simplified interface
       !PRINT*,coord_r,": computing for ",ulmMag-llmMag+1," rows, chebt_oc = ",chebt_oc
 
-      !PERFON('upB_fin')
       all_lms=lmStop-lmStart_00+1
 #ifdef WITHOMP
       if (all_lms < maxThreads) then
@@ -305,7 +300,6 @@ contains
 #ifdef WITHOMP
       call omp_set_num_threads(maxThreads)
 #endif
-      !PERFOFF
 
       ! This is a loop over all l values which should be treated on 
       ! the actual MPI coord_r
@@ -554,12 +548,10 @@ contains
                end do
 #endif
 
-               !LIKWID_ON('upB_sol')
                call solve_mat(bMat(:,:,l1),n_r_tot,n_r_real, &
                     &         bPivot(:,l1),rhs1(:,lmB0+1:lmB,threadid),lmB-lmB0)
                call solve_mat(jMat(:,:,l1),n_r_tot,n_r_real, &
                     &         jPivot(:,l1),rhs2(:,lmB0+1:lmB,threadid),lmB-lmB0)
-               !LIKWID_OFF('upB_sol')
             end if
 
             if ( lRmsNext ) then ! Store old b,aj
@@ -574,7 +566,6 @@ contains
             end if
 
             !----- Update magnetic field in cheb space:
-            !PERFON('upB_set')
             lmB=lmB0
             do lm=lmB0+1,min(iChunk*chunksize,sizeLMB2(nLMB2,nLMB))
                !do lm=1,sizeLMB2(nLMB2,nLMB)
@@ -639,7 +630,6 @@ contains
          end do
       end if
 
-      !PERFON('upB_drv')
       all_lms=lmStop-lmStart_00+1
 #ifdef WITHOMP
       if (all_lms < maxThreads) then
@@ -672,13 +662,11 @@ contains
          if (iThread == nThreads-1) stop_lm=lmStop
 
          !-- Radial derivatives: dbdtLast and djdtLast used as work arrays
-         !PERFON('upB_db')
          call get_ddr(b,db,ddb,ulmMag-llmMag+1,start_lm-llmMag+1, &
               &       stop_lm-llmMag+1,n_r_max,rscheme_oc,l_dct_in=.false.)
          call rscheme_oc%costf1(b,ulmMag-llmMag+1,start_lm-llmMag+1, &
               &                 stop_lm-llmMag+1)
 
-         !PERFOFF
          call get_ddr(aj,dj,ddj,ulmMag-llmMag+1,start_lm-llmMag+1, &
               &       stop_lm-llmMag+1,n_r_max,rscheme_oc,l_dct_in=.false.)
          call rscheme_oc%costf1(aj, ulmMag-llmMag+1, start_lm-llmMag+1, &
@@ -706,10 +694,8 @@ contains
 #ifdef WITHOMP
       call omp_set_num_threads(maxThreads)
 #endif
-      !PERFOFF
       !-- We are now back in radial space !
 
-      !PERFON('upB_last')
       if ( l_LCR ) then
          do nR=n_r_cmb,n_r_icb-1
             if ( nR<=n_r_LCR ) then
@@ -768,13 +754,11 @@ contains
                  &          dtBTor2hInt(llmMag:,nR,1),lo_map)
          end if
       end do
-      !PERFOFF
 
       !----- equations for inner core are different:
       !      D_lP1(lm1)=l+1, O_sr=sigma/sigma_ic
       !      NOTE: no hyperdiffusion in inner core !
       if ( l_cond_ic ) then
-         !PERFON('upB_ic')
          do nR=2,n_r_ic_max-1
             do lm1=lmStart_00,lmStop
                l1=lm2l(lm1)
@@ -800,7 +784,6 @@ contains
             &    coex*opm*O_sr*dLh(map_glbl_st%lm2(l1,m1))*or2(n_r_max) * &
             &    (one+two*D_lP1(map_glbl_st%lm2(l1,m1)))*ddj_ic(lm1,nR)
          end do
-         !PERFOFF
       end if
 
    end subroutine updateB

@@ -486,7 +486,6 @@ contains
          !PRINT*,"For the header, we wrote ",bytes_written," bytes."
       else  ! Call not for writing header
 
-         !PERFON('mw_data')
          bytes_written=0
 
          !-- Determine radius and thetas in this block:
@@ -616,7 +615,6 @@ contains
 
          !write(*,"(A,I8)") "bytes_written = ",bytes_written
 
-         !PERFOFF
       end if
       !$OMP END CRITICAL
    end subroutine graphOut_mpi
@@ -976,11 +974,9 @@ contains
       integer :: n_phi,n_theta_loc
 
 
-      !PERFON('gwrite')
       do n_theta_loc=1,n_thetas
          write(n_graph_file) (dummy(n_phi,n_theta_loc),n_phi=1,n_phis)
       end do
-      !PERFOFF
 
    end subroutine graph_write
 !------------------------------------------------------------------------------
@@ -1016,7 +1012,6 @@ contains
       call MPI_FILE_WRITE(graph_mpi_fh,n_phis*n_thetas*SIZEOF_OUT_REAL,1, &
                           MPI_INTEGER,status,ierr)
 #else
-      !PERFON('gwrite_M')
       do n_theta_loc=1,n_thetas
 
          call MPI_FILE_WRITE(graph_mpi_fh,n_phis*SIZEOF_OUT_REAL,1, &
@@ -1030,7 +1025,6 @@ contains
             !      (dummy(n_phi,n_theta_loc),n_phi=1,n_phis)
 
       end do
-      !PERFOFF
 
 #endif
    end subroutine graph_write_mpi

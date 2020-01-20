@@ -417,7 +417,6 @@ contains
                &                     or1(nR)*this%vrc(nPhi,nTheta)*cnt)
             end do
          end do ! theta loop
-         !$OMP END PARALLEL DO
 
       end if ! precession term required ?
 
@@ -463,9 +462,6 @@ contains
 
             !----- Only vp /= 0 at boundary allowed (rotation of boundaries about z-axis):
             !----- During differential precession, vt /= 0 too.
-            !$OMP PARALLEL DO default(none) &
-            !$OMP& private(nTheta, nPhi, nThetaNHS, or4sn2) &
-            !$OMP& shared(this, sizeThetaB, or4, orho1, n_phi_max, nR, osn2, l_diff_prec)
             do nTheta=l_theta, u_theta
                nThetaNHS=(nTheta+1)/2
                or4sn2   =or4(nR)*osn2(nThetaNHS)

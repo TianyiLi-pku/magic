@@ -147,9 +147,7 @@ contains
 
       real(cp) :: work(ld_f,nrep)
 
-      !PERFON('fft2r')
       call fftJW(f,ld_f,n_phi_max,1,nrep,work,ld_f,nrep,i_fft_init,d_fft_init)
-      !PERFOFF
 
    end subroutine fft_to_real
 !------------------------------------------------------------------------------
@@ -160,9 +158,7 @@ contains
 
       real(cp) :: work(nrp,nfs)
 
-      !PERFON('fft_thr')
       call fftJW(f,nrp,n_phi_max,dir,sizeThetaB,work,nrp,nfs,i_fft_init,d_fft_init)
-      !PERFOFF
 
    end subroutine fft_thetab
 !------------------------------------------------------------------------------

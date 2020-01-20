@@ -1,10 +1,6 @@
 #include "perflib_preproc.cpp"
 module legendre_spec_to_grid
 
-#ifdef WITH_LIKWID
-#include "likwid_f90.h"
-#endif
-
    use precision_mod
    use geometry, only: lm_max, n_m_max, nrp, l_max, l_axi
    use blocking, only: nfs, sizeThetaB
@@ -107,14 +103,11 @@ contains
       nThetaNHS=(nThetaStart-1)/2
     
       if ( nBc == 0 .or. lDeriv ) then ! not a boundary or derivs required
-         !PERFON('TFG_inn')
-         !PERFON('TFG_thl')
          do nThetaN=1,sizeThetaB,2   ! Loop over thetas for north HS
             nThetaS  =nThetaN+1      ! same theta but for southern HS
             nThetaNHS=nThetaNHS+1    ! theta-index of northern hemisph. point
     
             !--- Loop over all orders m: (numbered by mc)
-            PERFON_I('TFG_2')
             do mc=1,n_m_max
                lmS=lStop(mc)
                cvrES  =zero
@@ -150,8 +143,6 @@ contains
                brc(2*mc-1,nThetaS)   = real(brES   -brEA)
                brc(2*mc  ,nThetaS)   =aimag(brES   -brEA)
             end do
-            PERFOFF_I
-            PERFON_I('TFG_3')
             do mc=1,n_m_max
                dm =D_mc2m(mc)
                lmS=lStop(mc)
@@ -194,8 +185,6 @@ contains
                cbrc(2*mc-1,nThetaS)  = real(cbrES  -cbrEA)
                cbrc(2*mc  ,nThetaS)  =aimag(cbrES  -cbrEA)
             end do
-            PERFOFF_I
-            PERFON_I('TFG_4')
     
             !--- Now the stuff using generalized harmonics:
             do mc=1,n_m_max
@@ -222,8 +211,6 @@ contains
                vhN2M(mc)=half*vhN2
                vhS2M(mc)=half*vhS2
             end do
-            PERFOFF_I
-            PERFON_I('TFG_5')
     
             do mc=1,n_m_max
                lmS=lStop(mc)
@@ -253,8 +240,6 @@ contains
                dvhdrN2M(mc)=half*dvhdrN2
                dvhdrS2M(mc)=half*dvhdrS2
             end do
-            PERFOFF_I
-            PERFON_I('TFG_6')
     
             do mc=1,n_m_max
                lmS=lStop(mc)
@@ -280,8 +265,6 @@ contains
                bhN2M(mc)=half*bhN2
                bhS2M(mc)=half*bhS2
             end do
-            PERFOFF_I
-            PERFON_I('TFG_7')
     
             do mc=1,n_m_max
                lmS=lStop(mc)
@@ -311,8 +294,6 @@ contains
                cbhN2M(mc)=half*cbhN2
                cbhS2M(mc)=half*cbhS2
             end do
-            PERFOFF_I
-            PERFON_I('TFG_8')
     
             !--- Unscramble:
             !--- 6 add/mult, 20 dble words
@@ -367,8 +348,6 @@ contains
                cbpc(2*mc-1,nThetaS)=aimag(cbhS)
                cbpc(2*mc  ,nThetaS)=-real(cbhS)
             end do ! Loop over order m
-            PERFOFF_I
-            PERFON_I('TFG_9')
     
             !--- Calculate phi derivatives:
             do mc=1,n_m_max
@@ -389,10 +368,8 @@ contains
                dvpdpc(2*mc-1,nThetaS)=-dmT*vpc(2*mc  ,nThetaS)
                dvpdpc(2*mc  ,nThetaS)= dmT*vpc(2*mc-1,nThetaS)
             end do   ! End of loop over oder m numbered by mc
-            PERFOFF_I
          end do      ! End global loop over nTheta
     
-         !PERFOFF
     
          !-- Zero out terms with index mc > n_m_max:
          if ( n_m_max < nrp/2 ) then
@@ -420,11 +397,9 @@ contains
                end do
             end do  ! loop over nThetaN (theta)
          end if
-         !PERFOFF
     
       else   ! boundary ?
     
-         !PERFON('TFG_bnd')
          !-- Calculation for boundary r_cmb or r_icb:
     
          do nThetaN=1,sizeThetaB,2
@@ -544,7 +519,6 @@ contains
                end do
             end if
          end if
-         !PERFOFF
       end if  ! boundary ? nBc?
     
    end subroutine legTFG

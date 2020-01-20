@@ -1,7 +1,3 @@
-#ifdef WITH_LIKWID
-#include "likwid_f90.h"
-#endif
-
 module nonlinear_lm_mod
 
    use, intrinsic :: iso_c_binding
@@ -687,7 +683,6 @@ subroutine get_td(this,nR,nBc,lRmsCalc,lPressCalc,dVSrLM,dVPrLM,dVXirLM, &
        
                   !------ Recycle CorPol and AdvPol:
                   if ( l_corr ) then
-                     !PERFON('td_cv2c')
                      if ( l < l_max .and. l > m ) then
                         CorPol_loc=                    two*CorFac*or2(nR) *      &
                         &                    ( -dPhi0_loc(lm) * ( dw_Rdist(lm,nR) &
@@ -710,12 +705,10 @@ subroutine get_td(this,nR,nBc,lRmsCalc,lPressCalc,dVSrLM,dVPrLM,dVXirLM, &
                         &                    )
        
                      end if
-                     !PERFOFF
                   else
                      CorPol_loc=zero
                   end if
                   if ( l_conv_nl ) then
-                     !PERFON('td_cv2nl')
                      if ( l > m ) then
                         AdvPol_loc= dTheta1S_loc(lm)*this%AdvtLM(lmPS) - &
                         &           dTheta1A_loc(lm)*this%AdvtLM(lmPA) + &
@@ -724,7 +717,6 @@ subroutine get_td(this,nR,nBc,lRmsCalc,lPressCalc,dVSrLM,dVPrLM,dVXirLM, &
                         AdvPol_loc=-dTheta1A_loc(lm)*this%AdvtLM(lmPA) + &
                         &               dPhi_loc(lm)*this%AdvpLM(lmP)
                      end if
-                     !PERFOFF
                   else
                      AdvPol_loc=zero
                   end if
@@ -782,7 +774,6 @@ subroutine get_td(this,nR,nBc,lRmsCalc,lPressCalc,dVSrLM,dVPrLM,dVXirLM, &
                lmPA=map_dist_st%lmP2lmPA(lmP)
                
                !------ This is horizontal heat advection:
-               !PERFON('td_h1')
     
                if ( l > m ) then
                   dsdt_loc= -dTheta1S_loc(lm)*this%VStLM(lmPS) &
@@ -792,8 +783,6 @@ subroutine get_td(this,nR,nBc,lRmsCalc,lPressCalc,dVSrLM,dVPrLM,dVXirLM, &
                   dsdt_loc=  dTheta1A_loc(lm)*this%VStLM(lmPA) &
                   &          -dPhi_loc(lm)*this%VSpLM(lmP)
                end if
-               !PERFOFF
-               !PERFON('td_h2')
                if ( l_anel ) then
                   if ( l_anelastic_liquid .or. l_TP_form ) then
                      dsdt_loc = dsdt_loc+ &
@@ -811,7 +800,6 @@ subroutine get_td(this,nR,nBc,lRmsCalc,lPressCalc,dVSrLM,dVPrLM,dVXirLM, &
                      end if
                   end if
                end if
-               !PERFOFF
                !-----   simplified form for linear onset !
                !        not ds not saved in the current program form!
                !                 dsdt(lm)=

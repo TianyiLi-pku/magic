@@ -355,7 +355,6 @@ contains
     
                if ( l_z10mat .and. lm1 == l1m0 ) then
                   !write(*,"(A,3I3)") "l_z10mat and lm1=",lm1,l1,m1
-                  !PERFON('upZ_z10')
                   !----- Special treatment of z10 component if ic or mantle
                   !      are allowed to rotate about z-axis (l_z10mat=.true.) and
                   !      we use no slip boundary condition (ktopv=1,kbotv=1):
@@ -448,7 +447,6 @@ contains
     
     
                else if ( l1 /= 0 ) then
-                  !PERFON('upZ_ln0')
                   lmB=lmB+1
                   
                   rhs1(1,lmB,threadid)      =0.0_cp
@@ -513,16 +511,13 @@ contains
                      rhs1(nR,lmB,threadid)=zMat_fac(nR,l1)*rhs1(nR,lmB,threadid)
 #endif
                   end do
-                  !PERFOFF
                end if
             end do
 
-            !PERFON('upZ_sol')
             if ( lmB > lmB0 ) then
                call solve_mat(zMat(:,:,l1),n_r_max,n_r_max, &
                     &         zPivot(:,l1),rhs1(:,lmB0+1:lmB,threadid),lmB-lmB0)
             end if
-            !PERFOFF
             if ( lRmsNext ) then ! Store old z
                do nR=1,n_r_max
                   do lm=lmB0+1,min(iChunk*chunksize,sizeLMB2(nLMB2,nLMB))
@@ -557,7 +552,6 @@ contains
                   end if
                end if
             end do
-            !PERFOFF
             !$OMP END TASK
          end do
          !$OMP END TASK
@@ -573,7 +567,6 @@ contains
          end do
       end do
     
-      !PERFON('upZ_drv')
       all_lms=lmStop-lmStart_00+1
 #ifdef WITHOMP
       if (all_lms < omp_get_max_threads()) then
@@ -614,9 +607,7 @@ contains
 #ifdef WITHOMP
       call omp_set_num_threads(omp_get_max_threads())
 #endif
-      !PERFOFF
       
-      !PERFON('upZ_icma')
       !--- Update of inner core and mantle rotation:
       if ( l10 ) then
          if ( l_rot_ma .and. .not. l_SRMA ) then
@@ -641,8 +632,6 @@ contains
             !write(*,"(A,I4,A,ES20.13)") "after ic update, nLMB = ",nLMB,", omega_ic = ",omega_ic
          end if
       end if  ! l=1,m=0 contained in block ?
-      !PERFOFF
-      !PERFON('upZ_ang')
       !--- We correct so that the angular moment about axis in the equatorial plane
       !    vanish and the angular moment about the (planetary) rotation axis
       !    is kept constant.
@@ -820,7 +809,6 @@ contains
             &    real(dz(lm1,n_r_max)) )
          end if
       end if
-      !PERFOFF
    end subroutine updateZ
 !-------------------------------------------------------------------------------
    subroutine updateZ_new(z,dz,dzdt,dzdtLast,time,omega_ma,d_omega_ma_dtLast, &

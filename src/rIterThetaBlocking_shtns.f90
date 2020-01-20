@@ -204,9 +204,7 @@ contains
       if ( (.not.this%isRadialBoundaryPoint) .or. this%lMagNlBc .or. &
             this%lRmsCalc ) then
 
-         PERFON('get_nl')
          call this%gsa%get_nl_shtns(time, this%nR, this%nBc, this%lRmsCalc)
-         PERFOFF
          
          call this%transform_to_lm_space_shtns
       
@@ -236,7 +234,6 @@ contains
               &            br_vt_lm_icb,br_vp_lm_icb)
       end if
       
-      !PERFOFF
       !--------- Calculate Lorentz torque on inner core:
       !          each call adds the contribution of the theta-block to
       !          lorentz_torque_ic
@@ -254,7 +251,6 @@ contains
               &                  this%gsa%brc,        &
               &                  this%gsa%bpc,this%nR)
       end if
-      !PERFOFF
       
       !--------- Calculate courant condition parameters:
       if ( this%l_cour ) then
@@ -270,15 +266,13 @@ contains
       !< parallelization postponed >
 !       if ( this%l_graph ) then
 ! #ifdef WITH_MPI
-!             PERFON('graphout')
-!             call graphOut_mpi(time,this%nR,this%gsa%vrc,           &
+!!             call graphOut_mpi(time,this%nR,this%gsa%vrc,           &
 !                  &            this%gsa%vtc,this%gsa%vpc,           &
 !                  &            this%gsa%brc,this%gsa%btc,           &
 !                  &            this%gsa%bpc,this%gsa%sc,            &
 !                  &            this%gsa%pc,this%gsa%xic,            &
 !                  &            1 ,this%sizeThetaB, lGraphHeader)
-!             PERFOFF
-! #else
+!! #else
 !             call graphOut(time,this%nR,this%gsa%vrc,           &
 !                  &        this%gsa%vtc,this%gsa%vpc,           &
 !                  &        this%gsa%brc,this%gsa%btc,           &
@@ -298,7 +292,6 @@ contains
       !--------- Helicity output:
       if ( this%lHelCalc ) then
          print *, "PANIC lHelCalc"
-         PERFON('hel_out')
          call get_helicity(this%gsa%vrc,this%gsa%vtc,          &
               &        this%gsa%vpc,this%gsa%cvrc,             &
               &        this%gsa%dvrdtc,                        &
@@ -306,19 +299,16 @@ contains
               &        this%gsa%dvtdrc,                        &
               &        this%gsa%dvpdrc,HelLMr,Hel2LMr,         &
               &        HelnaLMr,Helna2LMr,this%nR,1 )
-         PERFOFF
       end if
 
       !--------- Viscous heating:
       if ( this%lPowerCalc ) then
          print *, "PANIC lPowerCalc"
-         PERFON('hel_out')
          call get_visc_heat(this%gsa%vrc,this%gsa%vtc,this%gsa%vpc,     &
               &        this%gsa%cvrc,this%gsa%dvrdrc,this%gsa%dvrdtc,   &
               &        this%gsa%dvrdpc,this%gsa%dvtdrc,this%gsa%dvtdpc, &
               &        this%gsa%dvpdrc,this%gsa%dvpdpc,viscLMr,         &
               &        this%nR,1)
-         PERFOFF
       end if
   
       !--------- horizontal velocity :
@@ -361,7 +351,6 @@ contains
       !--------- Movie output:
       if ( this%l_frame .and. l_movie_oc .and. l_store_frame ) then
          print *, "PANIC l_frame"
-         PERFON('mov_out')
          call store_movie_frame(this%nR,this%gsa%vrc,                &
               &                 this%gsa%vtc,this%gsa%vpc,           &
               &                 this%gsa%brc,this%gsa%btc,           &
@@ -375,7 +364,6 @@ contains
               &                 this%gsa%cbrc,                       &
               &                 this%gsa%cbtc,1 ,                    &
               &                 this%sizeThetaB,this%leg_helper%bCMB)
-         PERFOFF
       end if
 
 
@@ -384,7 +372,6 @@ contains
       !          for graphic output:
       if ( l_dtB ) then
          print *, "PANIC dtBLM"
-         PERFON('dtBLM')
          call get_dtBLM(this%nR,this%gsa%vrc,this%gsa%vtc,                    &
               &         this%gsa%vpc,this%gsa%brc,                            &
               &         this%gsa%btc,this%gsa%bpc,                            &
@@ -396,12 +383,10 @@ contains
               &         this%dtB_arrays%BpVtCotLM,this%dtB_arrays%BtVZcotLM,  &
               &         this%dtB_arrays%BtVpSn2LM,this%dtB_arrays%BpVtSn2LM,  &
               &         this%dtB_arrays%BtVZsn2LM)
-         PERFOFF
       end if
 
 
       !--------- Torsional oscillation terms:
-      PERFON('TO_terms')
       if ( ( this%lTONext .or. this%lTONext2 ) .and. l_mag ) then
          print *, "PANIC lTONext"
          call getTOnext(this%leg_helper%zAS,this%gsa%brc,   &
@@ -423,7 +408,6 @@ contains
               &     this%TO_arrays%dzCorLM,this%TO_arrays%dzLFLM,     &
               &     dtLast,this%nR,1,this%sizeThetaB)
       end if
-      PERFOFF
       
 
       lorentz_torque_ic = lorentz_torques_ic
@@ -443,13 +427,13 @@ contains
       !   over the different models that s_LMLoop.f parallelizes over.
       !write(*,"(A,I4,2ES20.13)") "before_td: ", &
       !     &  this%nR,sum(real(conjg(VxBtLM)*VxBtLM)),sum(real(conjg(VxBpLM)*VxBpLM))
-      !PERFON('get_td')
+      PERFON('getTd')
       call this%nl_lm%get_td(this%nR, this%nBc, this%lRmsCalc, &
            &                 this%lPressCalc, dVSrLM, dVPrLM, dVXirLM,   &
            &                 dVxVhLM, dVxBhLM, dwdt, dzdt, dpdt, dsdt,   &
            &                 dxidt, dbdt, djdt, this%leg_helper)
+      PERFOFF
            
-      !PERFOFF
       !write(*,"(A,I4,ES20.13)") "after_td:  ", &
       !     & this%nR,sum(real(conjg(dVxBhLM(:,this%nR_Mag))*dVxBhLM(:,this%nR_Mag)))
       !-- Finish calculation of TO variables:
@@ -465,14 +449,12 @@ contains
       !    advection terms:
       if ( l_dtB ) then
          print *, "PANIC l_dtB"
-         PERFON('dtBLM')
          call get_dH_dtBLM(this%nR,this%dtB_arrays%BtVrLM,this%dtB_arrays%BpVrLM,&
               &            this%dtB_arrays%BrVtLM,this%dtB_arrays%BrVpLM,        &
               &            this%dtB_arrays%BtVpLM,this%dtB_arrays%BpVtLM,        &
               &            this%dtB_arrays%BrVZLM,this%dtB_arrays%BtVZLM,        &
               &            this%dtB_arrays%BtVpCotLM,this%dtB_arrays%BpVtCotLM,  &
               &            this%dtB_arrays%BtVpSn2LM,this%dtB_arrays%BpVtSn2LM)
-         PERFOFF
       end if
       
     end subroutine do_iteration_ThetaBlocking_shtns
@@ -489,9 +471,9 @@ contains
       real(cp), intent(in) :: time
       integer :: nR
 
+      PERFON('sh2g')
       nR = this%nR
 
-      PERFON('lm2sp_d')
       if ( l_conv .or. l_mag_kin ) then
          if ( l_heat ) then
             call sh_to_spat_dist(s_Rdist(:, nR), this%gsa%sc)
@@ -589,7 +571,7 @@ contains
       
       integer :: nPhi, nTheta
       
-      PERFON('sp2lm_d')
+      PERFON('g2sh')
       if ( (.not.this%isRadialBoundaryPoint .or. this%lRmsCalc) &
             .and. ( l_conv_nl .or. l_mag_LF ) ) then
          if ( l_conv_nl .and. l_mag_LF ) then

@@ -134,11 +134,9 @@ program magic
    use LMmapping, only: initialize_mapping, finalize_mapping
    use shtns
    use fft
+   use omp_lib
    
    !use rIterThetaBlocking_mod,ONLY: initialize_rIterThetaBlocking
-#ifdef WITH_LIKWID
-#  include "likwid_f90.h"
-#endif
 
 
    implicit none
@@ -183,9 +181,6 @@ program magic
 #endif
 
    PERFINIT
-   PERFON('main')
-   LIKWID_INIT
-   !LIKWID_ON('main')
    call initialize_mpi_world
 
    !--- Read starting time
@@ -199,6 +194,10 @@ program magic
       &     values(1), values(2), values(3), values(5), values(6), values(7)
       write(6, *) '!  Start time:  ', date
    end if
+   
+   !$OMP PARALLEL
+   print *, " Rank/Thread ID:", rank, OMP_GET_THREAD_NUM()
+   !$OMP END PARALLEL
 
    
    !-- This includes sent to other procs
@@ -334,9 +333,7 @@ program magic
    n_time_step_start=n_time_step
 
    !--- Call time-integration routine:
-   PERFON('steptime')
    call step_time(time,dt,dtNew,n_time_step)
-   PERFOFF
    !--- Write stop time to SDTOUR and logfile:
    if ( rank == 0 ) then
       if ( l_save_out ) then
@@ -421,11 +418,9 @@ program magic
 
    if ( rank == 0 .and. (.not. l_save_out) )  close(n_log_file)
    
-   PERFOFF
    
 #ifdef WITHPERF
    do n=0,n_ranks-1
-      if ( rank == 0) print *, "Doing it for rank ", n, " of ", n_ranks
       if (rank == n) then
          print *, "PerfOut for rank: ", rank
          print *, "======================================================="
@@ -436,8 +431,6 @@ program magic
    end do
 #endif
 
-   !LIKWID_OFF('main')
-   LIKWID_CLOSE
 !-- EVERYTHING DONE ! THE END !
    call mpi_finalize(ierr)
 

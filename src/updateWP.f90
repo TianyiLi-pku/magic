@@ -229,7 +229,6 @@ contains
       O_dt=one/dt
 
       if ( l_double_curl ) then
-         !PERFON('upS_fin')
          !$OMP PARALLEL  &
          !$OMP private(iThread,start_lm,stop_lm,nR,lm) &
          !$OMP shared(all_lms,per_thread) &
@@ -267,10 +266,8 @@ contains
          end do
          !$OMP end do
          !$OMP END PARALLEL
-         !PERFOFF
       end if
 
-      !PERFON('upWP_ssol')
       !$OMP PARALLEL default(shared) &
       !$OMP private(nLMB2,lm,lm1,l1,m1,lmB)
       !write(*,"(I3,A)") omp_get_thread_num(),": before SINGLE"
@@ -298,7 +295,6 @@ contains
             end if
          else
             if ( .not. lWPmat(l1) ) then
-               !PERFON('upWP_mat')
                if ( l_double_curl ) then
                   call get_wMat(dt,l1,hdif_V(map_glbl_st%lm2(l1,0)), &
                        &        wpMat(:,:,l1),wpPivot(:,l1),wpMat_fac(:,:,l1))
@@ -307,7 +303,6 @@ contains
                        &         wpMat(:,:,l1),wpPivot(:,l1),wpMat_fac(:,:,l1))
                end if
                lWPmat(l1)=.true.
-               !PERFOFF
             end if
          end if
 
@@ -317,7 +312,6 @@ contains
             !$OMP private(lmB0,lmB,lm,lm1,m1,nR,n_r_out) &
             !$OMP private(threadid)
 
-            !PERFON('upWP_set')
 #ifdef WITHOMP
             threadid = omp_get_thread_num()
 #else
@@ -425,9 +419,7 @@ contains
                   end if
                end if
             end do
-            !PERFOFF
 
-            !PERFON('upWP_sol')
             if ( lmB > 0 ) then
 
                ! use the mat_fac(:,1) to scale the rhs
@@ -445,7 +437,6 @@ contains
                   end do
                end do
             end if
-            !PERFOFF
 
             if ( lRmsNext ) then ! Store old w
                do nR=1,n_r_max
@@ -465,7 +456,6 @@ contains
                end do
             end if
 
-            !PERFON('upWP_aft')
             lmB=lmB0
             do lm=lmB0+1,min(iChunk*chunksize,sizeLMB2(nLMB2,nLMB))
                lm1=lm22lm(lm,nLMB2,nLMB)
@@ -508,14 +498,12 @@ contains
                   end if
                end if
             end do
-            !PERFOFF
             !$OMP END TASK
          end do
          !$OMP END TASK
       end do   ! end of loop over l1 subblocks
       !$OMP END SINGLE
       !$OMP END PARALLEL
-      !PERFOFF
       !write(*,"(A,I3,4ES22.12)") "w,p after: ",nLMB,get_global_SUM(w),get_global_SUM(p)
 
       !-- set cheb modes > rscheme_oc%n_max to zero (dealiazing)
@@ -530,7 +518,6 @@ contains
       end do
 
 
-      !PERFON('upWP_drv')
       all_lms=lmStop-lmStart+1
 #ifdef WITHOMP
       if (all_lms < omp_get_max_threads()) then
@@ -583,7 +570,6 @@ contains
 #ifdef WITHOMP
       call omp_set_num_threads(omp_get_max_threads())
 #endif
-      !PERFOFF
 
       if ( lRmsNext ) then
          n_r_top=n_r_cmb
@@ -593,7 +579,6 @@ contains
          n_r_bot=n_r_icb-1
       end if
 
-      !PERFON('upWP_ex')
       !-- Calculate explicit time step part:
       if ( l_double_curl ) then
 
@@ -724,12 +709,10 @@ contains
          end do
 
       end if
-      !PERFOFF
 
       ! In case pressure is needed in the double curl formulation
       ! we also have to compute the radial derivative of p
       if ( lPressNext .and. l_double_curl ) then
-         !PERFON('upWP_drv')
          all_lms=lmStop-lmStart+1
 #ifdef WITHOMP
          if (all_lms < omp_get_max_threads()) then
@@ -827,7 +810,6 @@ contains
          end do
       end if
       
-      !!!!!!!!!!!!!!!!!!!!!!! NEW
       ! Loops over the local l
       !---------------------------
       do lj=1,n_lo_loc
@@ -859,9 +841,10 @@ contains
             lm = map_glbl_st%lm2(l,m)
             
             if (l == 0) then
+               PERFON('wRHS')
                if ( ThExpNb*ViscHeatFac /= 0 .and. ktopp==1 ) then
                   do nR=1,n_r_max
-                        work_new(nR)=ThExpNb*alpha0(nR)*temp0(nR)*rho0(nR)*r(nR)*r(nR)*real(s(l0m0,nR))
+                     work_new(nR)=ThExpNb*alpha0(nR)*temp0(nR)*rho0(nR)*r(nR)*r(nR)*real(s(l0m0,nR))
                   end do
                   rhs(1)=rInt_R(work_new,r,rscheme_oc)
                else
@@ -883,9 +866,13 @@ contains
                      &       real(dwdt(l0m0,nR))
                   end do
                end if
+               PERFOFF
                
+               PERFON('wSolve')
                call solve_mat(p0Mat_new,n_r_max,n_r_max,p0Pivot_new,rhs)
+               PERFOFF
             else ! l /= 0
+               PERFON('wRHS')
                rhs1_new(1,mi)        =0.0_cp
                rhs1_new(n_r_max,mi)  =0.0_cp
                rhs1_new(n_r_max+1,mi)=0.0_cp
@@ -941,13 +928,16 @@ contains
                         end do
                   end if
                end if
+               PERFOFF
                rhs1_new(:,mi)=rhs1_new(:,mi)*wpMat_fac_new(:,1,lj)
             end if
          end do
          
          ! Now we solve all linear systems in a block
+         PERFON('wSolve')
          if ( l > 0 ) call solve_mat(wpMat_new(:,:,lj),2*n_r_max,2*n_r_max, &
                            &         wpPivot_new(:,lj),rhs1_new(:,1:nRHS),nRHS)
+         PERFOFF
          
          ! Loops over the local m's associated with this l (again)
          ! This will copy the solution of each RHS into s
@@ -1012,6 +1002,7 @@ contains
       
       !-- Transform to radial space and get radial derivatives
       !   using dwdtLast, dpdtLast as work arrays:
+      PERFON('wDR')
       if ( l_double_curl ) then
          call get_dr( w, dw, n_mlo_loc, 1, n_mlo_loc, n_r_max, &
                &      rscheme_oc, l_dct_in=.false.)
@@ -1024,8 +1015,9 @@ contains
          call get_dr( p, dp, n_mlo_loc, 1, n_mlo_loc, n_r_max, &
                &         rscheme_oc, l_dct_in=.false. )
       end if
-      call rscheme_oc%costf1(w,n_mlo_loc,1,n_mlo_loc)
+      call rscheme_oc%costf1(w,n_mlo_loc,1,n_mlo_loc) ! Is this before or after the getdddr?!?!
       call rscheme_oc%costf1(p,n_mlo_loc,1,n_mlo_loc)
+      PERFOFF
       
       if ( lRmsNext ) then
          n_r_top=n_r_cmb
@@ -1035,6 +1027,7 @@ contains
          n_r_bot=n_r_icb-1
       end if
       
+      PERFON('wField')
       if ( l_double_curl ) then
 
          if ( lPressNext ) then
@@ -1121,7 +1114,6 @@ contains
          end do
 
       else
-
          do nR=n_r_top,n_r_bot
             do i=1,n_mlo_loc
                l=map_mlo%i2l(i)
@@ -1171,6 +1163,7 @@ contains
          end do
 
       end if
+      PERFOFF
       
       ! In case pressure is needed in the double curl formulation
       ! we also have to compute the radial derivative of p
@@ -1210,6 +1203,8 @@ contains
       character(len=100) :: filename
       logical :: first_run=.true.
 #endif
+
+      PERFON('wMat')
 
       O_dt=one/dt
       dLh =real(l*(l+1),kind=cp)
@@ -1367,6 +1362,7 @@ contains
       if ( info /= 0 ) then
          call abortRun('Singular matrix wpMat!')
       end if
+      PERFOFF
 
    end subroutine get_wpMat
 !-----------------------------------------------------------------------------
@@ -1392,6 +1388,7 @@ contains
       integer :: info
       real(cp) :: O_dt,dLh
 
+      PERFON('wMat')
       O_dt=one/dt
       dLh =real(l*(l+1),kind=cp)
     
@@ -1521,6 +1518,8 @@ contains
       if ( info /= 0 ) then
          call abortRun('Singular matrix wMat!')
       end if
+      
+      PERFOFF
 
    end subroutine get_wMat
 !-----------------------------------------------------------------------------
@@ -1532,7 +1531,8 @@ contains
 
       !-- Local variables:
       integer :: info, nCheb, nR_out, nR, nCheb_in
-
+      
+      PERFON('wMat')
 
       do nR_out=1,n_r_max
          do nR=2,n_r_max
@@ -1601,7 +1601,9 @@ contains
       if ( info /= 0 ) then
          call abortRun('! Singular matrix p0Mat!')
       end if
-
+      
+      PERFOFF
+      
    end subroutine get_p0Mat
 !-----------------------------------------------------------------------------
 end module updateWP_mod

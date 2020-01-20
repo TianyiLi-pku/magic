@@ -1,3 +1,4 @@
+#include "perflib_preproc.cpp"
 module shtns
 
    use precision_mod, only: cp
@@ -9,6 +10,7 @@ module shtns
    use radial_functions, only: or2
    use parallel_mod
    use fft, only: fft_phi_loc
+   use omp_lib
 
    implicit none
 
@@ -246,7 +248,7 @@ contains
    !
    !----------------------------------------------------------------------------
 
-      !----------------------------------------------------------------------------
+   !----------------------------------------------------------------------------
    subroutine spat_to_SH_dist(Vr_loc, Qn_lmP_loc)
       !   
       !   Transform the spherical harmonic coefficients Qlm into its spatial 
@@ -351,8 +353,21 @@ contains
       complex(cp) :: transposed_loc(n_m_max,n_theta_loc)
       complex(cp) :: F_loc(n_phi_max/2+1,n_theta_loc)
       
+      
+      
+      complex(cp) :: Qn_lm_loc_tmp(n_lm_loc)
+      complex(cp) :: Ql_loc_tmp(n_theta_max,n_m_loc)
+      
       integer :: i, l_lm, u_lm, m
       
+      Qn_lm_loc_tmp = Qn_lm_loc
+      Ql_loc_tmp    = Ql_loc
+      
+      PERFON('dbg1')
+      !$OMP PARALLEL DO PRIVATE(i,m,l_lm,u_lm) &
+      !$OMP &   SHARED(Qn_lm_loc,Ql_loc,n_m_loc,coord_m, dist_m, map_dist_st, l_max, minc) &
+      !$OMP &   DEFAULT(None) &
+      !$OMP &   SCHEDULE(Dynamic,4)
       do i = 1, n_m_loc
         m = dist_m(coord_m, i)
         l_lm = map_dist_st%lm2(m, m)
@@ -360,6 +375,17 @@ contains
         call shtns_sh_to_spat_ml(m/minc, Qn_lm_loc(l_lm:u_lm), Ql_loc(:,i), &
                                  l_max)
       end do
+      !$OMP END PARALLEL DO
+      PERFOFF
+      
+      PERFON('dbg2')
+      do i = 1, n_m_loc
+        m = dist_m(coord_m, i)
+        l_lm = map_dist_st%lm2(m, m)
+        u_lm = map_dist_st%lm2(l_max, m)
+        call shtns_sh_to_spat_ml(m/minc, Qn_lm_loc_tmp(l_lm:u_lm), Ql_loc_tmp(:,i),l_max)
+      end do
+      PERFOFF
       
       call transpose_theta_m(Ql_loc, transposed_loc)
       

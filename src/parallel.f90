@@ -51,6 +51,12 @@ module parallel_mod
    !   MPI_COMM_WORLD
    integer :: rank, n_ranks
    
+   !   Intra-node Information
+   integer :: comm_intra
+   integer :: intra_rank, n_ranks_intra
+   integer, allocatable :: rank2intra(:)
+   integer, allocatable :: intra2rank(:)
+   
    !   Grid Space
    integer ::    comm_gs
    integer ::    comm_r,    comm_theta
@@ -84,6 +90,7 @@ module parallel_mod
    integer :: rank_with_l1m0
    integer :: chunksize
    integer :: ierr
+   logical :: l_verb_paral=.false.
    
    !   Maps coordinates from one cartesian grid to another.
    !   Acronyms convention:
@@ -114,6 +121,8 @@ contains
       !
       !-- Get number (name) of processor
       !
+      integer :: world_group, intra_group, i, j
+      integer, allocatable :: tmp(:)
       call mpi_comm_rank(MPI_COMM_WORLD,rank,    ierr)
       call mpi_comm_size(MPI_COMM_WORLD,n_ranks, ierr)
 
@@ -122,6 +131,30 @@ contains
 
       if (rank .ne. 0) l_save_out = .false.
       if (rank .ne. 0) lVerbose   = .false.
+      
+      !
+      !-- Figures out which ranks are local within their nodes
+      !
+      call mpi_comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL, comm_intra, ierr)
+      call mpi_comm_rank(comm_intra, intra_rank, ierr)
+      call mpi_comm_size(comm_intra, n_ranks_intra, ierr)
+      allocate(intra2rank(0:n_ranks_intra-1))
+      allocate(rank2intra(0:n_ranks-1))
+      
+      call mpi_comm_group(MPI_COMM_WORLD, world_group, ierr)
+      call mpi_comm_group(comm_intra, intra_group, ierr)
+      
+      allocate(tmp(0:n_ranks-1))
+      do i=0,n_ranks-1
+         tmp(i)=i
+      end do
+      
+      call mpi_group_translate_ranks(world_group, n_ranks, tmp, intra_group, &
+                  rank2intra, ierr)
+      call mpi_group_translate_ranks(intra_group, n_ranks_intra, tmp(0:n_ranks_intra-1),&
+                  world_group, intra2rank, ierr)
+                  
+      deallocate(tmp)
       
    end subroutine initialize_mpi_world
    
@@ -257,6 +290,7 @@ contains
       cart%mlo2lmr = cart%rnk2gsp
       cart%lmr2mlo = cart%lmr2rnk
       
+      if (l_verb_paral) call print_mpi_distribution
       
    end subroutine initialize_mpi_decomposition
    
@@ -346,6 +380,89 @@ contains
       end if
 
    end subroutine check_decomposition
+   
+   !------------------------------------------------------------------------------
+   subroutine print_mpi_distribution
+   
+      integer :: world_group, tmp_group, i, j
+      integer, allocatable :: tmp_ranks(:), world_ranks(:)
+      
+      if (rank==0) then
+         write(*,'(A)') '! MPI ranks distribution:'
+         write(*,'(A)') '! ----------------------'
+      end if
+      
+      call mpi_comm_group(MPI_COMM_WORLD, world_group, ierr)
+      allocate(tmp_ranks(0:n_ranks-1))
+      allocate(world_ranks(0:n_ranks-1))
+      do i=0,n_ranks-1
+         tmp_ranks(i)=i
+      end do
+      
+      ! Prints intranode ranks
+      do i=0,n_ranks-1
+         if ((rank==i) .and. (intra_rank == 0)) then
+            write(*,'(A,I0,A)') '! Intranode [@',rank,']'
+            call print_array(intra2rank)
+!             write(*,'(A,I0)',ADVANCE="NO") '! [',intra2rank(0)
+!             do j=1,n_ranks_intra-1
+!                write(*,'(A,I0)',ADVANCE="NO") ",",intra2rank(j)
+!             end do
+!             write(*,'(A,I0)') ']'
+         end if
+         call mpi_barrier(mpi_comm_world,ierr)
+      end do
+      
+      
+      ! Translate ranks from r communicator
+      call mpi_comm_group(comm_r, tmp_group, ierr)
+      call mpi_group_translate_ranks(tmp_group, n_ranks_r, &
+              tmp_ranks(0:n_ranks_r-1), world_group, &
+              world_ranks(0:n_ranks_r-1), ierr)
+      
+      ! Prints radial ranks
+      do i=0,n_ranks-1
+         if ((rank==i) .and. (coord_r == 0)) then
+            write(*,'(A,I0,A)') '! Radial [@',rank,']'
+            call print_array(world_ranks(0:n_ranks_r-1))
+         end if
+         call mpi_barrier(mpi_comm_world,ierr)
+      end do
+      
+      
+      ! Translate ranks from θ communicator
+      call mpi_comm_group(comm_theta, tmp_group, ierr)
+      call mpi_group_translate_ranks(tmp_group, n_ranks_theta, &
+              tmp_ranks(0:n_ranks_theta-1), world_group, &
+              world_ranks(0:n_ranks_theta-1), ierr)
+      
+      ! Prints theta ranks
+      do i=0,n_ranks-1
+         if ((rank==i) .and. (coord_theta == 0)) then
+            write(*,'(A,I0,A)') '! Theta [@',rank,']'
+            call print_array(world_ranks(0:n_ranks_theta-1))
+         end if
+         call mpi_barrier(mpi_comm_world,ierr)
+      end do
+      
+      
+      deallocate(tmp_ranks)
+      deallocate(world_ranks)
+   
+   end subroutine print_mpi_distribution
+   
+   !------------------------------------------------------------------------------
+   subroutine print_array(arr)
+      integer, intent(in) :: arr(:)
+      integer :: i
+   
+      write(*,'(A,I0)',ADVANCE="NO") '! [',arr(1)
+      do i=2,size(arr)
+         write(*,'(A,I0)',ADVANCE="NO") ",",arr(i)
+      end do
+      write(*,'(A,I0)') ']'
+   
+   end subroutine
 
 !-------------------------------------------------------------------------------
 end module parallel_mod

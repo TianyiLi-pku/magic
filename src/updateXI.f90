@@ -146,7 +146,6 @@ contains
       O_dt=one/dt
 
 
-      !PERFON('upS_fin')
       !$OMP PARALLEL  &
       !$OMP private(iThread,start_lm,stop_lm,nR,lm) &
       !$OMP shared(all_lms,per_thread,lmStart,lmStop) &
@@ -183,7 +182,6 @@ contains
       end do
       !$OMP end do
       !$OMP END PARALLEL
-      !PERFOFF
 
       ! one subblock is linked to one l value and needs therefore once the matrix
       !$OMP PARALLEL default(shared)
@@ -275,17 +273,13 @@ contains
                   end do
                end if
             end do
-            !PERFOFF
 
-            !PERFON('upXi_sol')
             if ( lmB  >  lmB0 ) then
                call solve_mat(xiMat(:,:,l1),n_r_max,n_r_max, &
                     &         xiPivot(:,l1),rhs1(:,lmB0+1:lmB,threadid),lmB-lmB0)
             end if
-            !PERFOFF
 
             lmB=lmB0
-            !PERFON('upXi_af')
             do lm=lmB0+1,min(iChunk*chunksize,sizeLMB2(nLMB2,nLMB))
                lm1=lm22lm(lm,nLMB2,nLMB)
                m1 =lm22m(lm,nLMB2,nLMB)
@@ -307,7 +301,6 @@ contains
                   end if
                end if
             end do
-            !PERFOFF
             !$OMP END TASK
          end do
          !$OMP END TASK
@@ -323,7 +316,6 @@ contains
          end do
       end do
 
-      !PERFON('upXi_drv')
       all_lms=lmStop-lmStart+1
 #ifdef WITHOMP
       if (all_lms < maxThreads) then
@@ -370,7 +362,6 @@ contains
 #ifdef WITHOMP
       call omp_set_num_threads(maxThreads)
 #endif
-      !PERFOFF
       !-- work_LMloc=dds not needed further after this point, used as work array later
 
    end subroutine updateXi

@@ -1,10 +1,6 @@
 #include "perflib_preproc.cpp"
 module step_time_mod
 
-#ifdef WITH_LIKWID
-#include "likwid_f90.h"
-#endif
-
    use fields
    use fieldsLast
    use parallel_mod
@@ -513,8 +509,8 @@ contains
       call mpi_barrier(comm_r,ierr)
 #endif
 
+      PERF_CONTEXT_START('tloop_ctx')
       PERFON('tloop')
-      !LIKWID_ON('tloop')
       outer: do n_time_step=1,n_time_steps_go 
          n_time_cour=n_time_cour+1
                   
@@ -527,9 +523,7 @@ contains
 
          ! =================================== BARRIER ======================
          ! z,dz
-         !PERFON('barr_0')
          !call MPI_Barrier(comm_r,ierr)
-         !PERFOFF
          ! ==================================================================
 
          ! Here now comes the block where the LM distributed fields
@@ -541,7 +535,6 @@ contains
 
          ! Waiting for the completion before we continue to the radialLoop
          ! put the waits before signals to avoid cross communication
-         PERFON('lo2r_wt')
 !          if ( l_heat )                call lo2r_redist_wait_dist(lo2r_s)
          if ( l_heat )                call ml2r_s%wait()
          if ( l_chemical_conv )       call lo2r_redist_wait_dist(lo2r_xi)
@@ -550,20 +543,18 @@ contains
 
 #ifdef WITH_MPI
          ! Broadcast omega_ic and omega_ma
+         PERFON('bcastOmg')
          call MPI_Bcast(omega_ic,1,MPI_DEF_REAL,rank_with_l1m0,comm_r,ierr)
          call MPI_Bcast(omega_ma,1,MPI_DEF_REAL,rank_with_l1m0,comm_r,ierr)
-#endif
          PERFOFF
-
-#ifdef WITH_MPI
-         ! =================================== BARRIER ======================
-         PERFON('barr_1')
-         call MPI_Barrier(comm_r,ierr)
-         PERFOFF
-         ! ==================================================================
 #endif
 
-         PERFON('signals')
+! #ifdef WITH_MPI
+!          ! =================================== BARRIER ======================
+!          call MPI_Barrier(comm_r,ierr)
+!          ! ==================================================================
+! #endif
+
          !This dealing with a signal file is quite expensive
          ! as the file can be read only on one coord_r and the result
          ! must be distributed to all other ranks.
@@ -620,9 +611,7 @@ contains
          ! something changed. For this we need one-sided communication
          ! because only process 0 knows if the communication is needed.
          !write(*,"(A)") "Win_fence 1 start"
-         !PERFON('fence1')
          !call MPI_Win_fence(0,signal_window,ierr)
-         !PERFOFF
          !write(*,"(A)") "Win_fence 1 end"
 
          ! Broadcast the results from the signal file to all processes
@@ -642,35 +631,33 @@ contains
             end if
          end if
 #endif
-#ifdef WITH_MPI
+#ifdef WITH_MPI  
+         PERFON('bcastSig')
          call MPI_Bcast(signals,5,MPI_integer,0,comm_r,ierr)
+         PERFOFF
 #endif
          !write(*,"(A)") "Win_fence 2 start"
-         !PERFON('fence2')
          !call MPI_Win_fence(0,signal_window,ierr)
-         !PERFOFF
          !write(*,"(A)") "Win_fence 2 end"
          n_stop_signal =signals(1)
          n_graph_signal=signals(2)
          n_rst_signal  =signals(3)
          n_spec_signal =signals(4)
          n_pot_signal  =signals(5)
-         PERFOFF
 
-#ifdef WITH_MPI
-         PERFON('barr_2')
-         call MPI_Barrier(comm_r,ierr)
-         PERFOFF
-#endif
+! #ifdef WITH_MPI
+!          call MPI_Barrier(comm_r,ierr)
+! #endif
 
-         PERFON('chk_stop')
          !--- Various reasons to stop the time integration:
          if ( l_runTimeLimit ) then
 #ifdef WITH_MPI
+            PERFON('tallred')
             time_in_ms=time2ms(runTime)
             call MPI_Allreduce(MPI_IN_PLACE,time_in_ms,1,MPI_integer8, &
                  &             MPI_MAX,comm_r,ierr)
             call ms2time(time_in_ms,runTime)
+            PERFOFF
 #endif
             if ( lTimeLimit(runTime,runTimeLimit) ) then
                write(message,'("! Run time limit exeeded !")')
@@ -684,8 +671,6 @@ contains
 
          !--- Another reasons to stop the time integration:
          if ( time >= tEND .and. tEND /= 0.0_cp ) l_stop_time=.true.
-         PERFOFF
-         !PERFON('logics')
          !-- Checking logic for output: 
          l_graph= l_correct_step(n_time_step-1,time,timeLast,n_time_steps,       &
               &                  n_graph_step,n_graphs,n_t_graph,t_graph,0) .or. &
@@ -831,7 +816,6 @@ contains
          lPressNext=( l_RMS .or. l_FluxProfs ) .and. l_logNext
 
          if ( l_graph ) then  ! write graphic output !
-            PERFON('graph')
             n_graph=n_graph+1     ! increase counter for graphic file
             if ( l_graph_time ) then 
                call dble2str(time,string)
@@ -881,7 +865,6 @@ contains
 #endif
             !call MPI_ERROR_STRING(ierr,error_string,length_of_error,ierr)
             !PRINT*,"MPI_FILE_OPEN returned: ",trim(error_string)
-            PERFOFF
          end if
          
          !--- Now the real work starts with the radial loop that calculates
@@ -891,14 +874,12 @@ contains
             write(*,*) '! Starting radial loop!'
          end if
 
-         !PERFOFF
          ! =============================== BARRIER ===========================
-         !PERFON('barr_2')
          !call MPI_Barrier(comm_r,ierr)
-         !PERFOFF
          ! ===================================================================
          call wallTime(runTimeRstart)
-
+         
+         PERFON('rLoop')
          call radialLoopG(l_graph,l_cour,l_frame,time,dt,dtLast,               &
               &           lTOCalc,lTONext,lTONext2,lHelCalc,                   &
               &           lPowerCalc,lRmsCalc,lPressCalc,                      &
@@ -914,6 +895,7 @@ contains
               &           fpoynLMr_Rloc,fresLMr_Rloc,EperpLMr_Rloc,            &
               &           EparLMr_Rloc,EperpaxiLMr_Rloc,EparaxiLMr_Rloc,       &
               &           dtrkc_Rloc,dthkc_Rloc)
+         PERFOFF
       
          if ( lVerbose ) write(*,*) '! r-loop finished!'
          if ( .not.l_log ) then
@@ -938,7 +920,6 @@ contains
          
          if ( lVerbose ) write(*,*) "! start r2lo redistribution"
          
-         PERFON('r2lo_dst')
          if ( l_conv .or. l_mag_kin ) then
             call r2lm_dflowdt%start(dflowdt_Rdist_container, dflowdt_LMdist_container, size(dflowdt_Rdist_container,3))
             call r2lm_dflowdt%wait()
@@ -965,27 +946,28 @@ contains
          ! but are needed on all processes.
          ! This might be "optimizeable" if being done together with the other allreduces
          ! (or if all the allreduces can be done in here). Need to be checked - Lago
+         PERFON('bcastLor')
          call MPI_Bcast(lorentz_torque_ic,1,MPI_DEF_REAL,n_ranks_r-1,comm_r,ierr)
          call MPI_Bcast(lorentz_torque_ma,1,MPI_DEF_REAL,0,comm_r,ierr)
-#endif
          PERFOFF
+#endif
          if ( lVerbose ) write(*,*) "! r2lo redistribution finished"
 
          !--- Output before update of fields in LMLoop:
          ! =================================== BARRIER ======================
-         !PERFON('barr_4')
          !call MPI_Barrier(comm_r,ierr)
-         !PERFOFF
          ! ==================================================================
          if ( lVerbose ) write(*,*) "! start output"
          if ( lVerbose ) write(*,*) "This part needs to be reviewed!", __LINE__, __FILE__
-         PERFON('output')
+         PERFON('tscatter')
          if ( l_cmb .and. l_dt_cmb_field ) then
             call gather_Flm(dbdt_dist(1:n_lm_loc,n_r_cmb), dbdt_CMB(1:lm_max))
             call scatter_from_rank0_to_lo(dbdt_CMB, dbdt_CMB_LMloc)
          end if
+         PERFOFF
          if ( lVerbose ) write(*,*) "! start real output"
          
+         PERFON('output')
          call output(time,dt,dtNew,n_time_step,l_stop_time,                &
               &      l_Bpot,l_Vpot,l_Tpot,l_log,l_graph,lRmsCalc,          &
               &      l_store,l_new_rst_file,                               &
@@ -1004,19 +986,15 @@ contains
          
          if ( l_graph ) then
 #ifdef WITH_MPI
-            PERFON('graph')
             call MPI_File_close(graph_mpi_fh,ierr)
             !call MPI_ERROR_STRING(ierr,error_string,length_of_error,ierr)
             !PRINT*,"MPI_FILE_CLOSE returned: ",trim(error_string)
-            PERFOFF
 #else
             close(n_graph_file)
 #endif
          end if
          ! =================================== BARRIER ======================
-         !PERFON('barr_5')
          !call MPI_Barrier(comm_r,ierr)
-         !PERFOFF
          ! ==================================================================
 
          !----- Finish time stepping, the last step is only for output!
@@ -1025,7 +1003,6 @@ contains
          !------ Nonlinear magnetic boundary conditions:
          !       For stressfree conducting boundaries
          
-         PERFON('nl_m_bnd')
          if ( l_b_nl_cmb ) then
             print *, "Parallelized, but never (properly) tested !", __LINE__, __FILE__
             call get_b_nl_bcs('CMB', br_vt_lm_cmb,br_vp_lm_cmb, &
@@ -1036,10 +1013,8 @@ contains
             call get_b_nl_bcs('ICB', br_vt_lm_icb,br_vp_lm_icb, &
                  &            b_nl_cmb_Rdist,aj_nl_icb_Rdist)
          end if
-         PERFOFF
          
 
-         PERFON('t_check')
          !---- Time-step check and change if needed (l_new_dtNext=.true.)
          !     I anticipate the dt change here that is only used in 
          !     the next time step cause its needed for coex=(alpha-1)/w2 !
@@ -1114,7 +1089,6 @@ contains
                lCourChecking=.false.
             end if
          end if
-         PERFOFF
 
 
          !----- UPDATING THE FIELDS:
@@ -1137,9 +1111,7 @@ contains
          end if
 
          ! =================================== BARRIER ======================
-         !PERFON('barr_6')
          !call MPI_Barrier(comm_r,ierr)
-         !PERFOFF
          ! ==================================================================
 
          call wallTime(runTimeRstart)
@@ -1152,10 +1124,9 @@ contains
             l_AB1 = .false.
          end if
          
-         PERFON('gat_aj')
          call gather_all  !Just gathers aj_nl_cmb and some other similar dudes!
-         PERFOFF
          
+         PERFON('lmLoop')
 !          call LMLoop(w1,coex,time,dt,lMat,lRmsNext,lPressNext,dVxVhLM_LMloc, &
 !               &      dVxBhLM_LMloc,dVSrLM_LMloc,dVPrLM_LMloc,dVXirLM_LMloc,  &
 !               &      dsdt_LMloc,dwdt_LMloc,dzdt_LMloc,dpdt_LMloc,dxidt_LMloc,&
@@ -1163,8 +1134,9 @@ contains
 !               &      lorentz_torque_ic,b_nl_cmb,aj_nl_cmb,aj_nl_icb)
          
          call LMLoop_new(w1,coex,time,dt,lMat,lRmsNext,lPressNext,dVxVhLM_LMdist, &
-              &      dVSrLM_LMdist, dsdt_LMdist,dwdt_LMdist,dzdt_LMdist,dpdt_LMdist,&
+              &      dVSrLM_LMdist,dsdt_LMdist,dwdt_LMdist,dzdt_LMdist,dpdt_LMdist,&
               &      lorentz_torque_ma,lorentz_torque_ic)
+         PERFOFF
 
          if ( lVerbose ) write(*,*) '! lm-loop finished!'
          call wallTime(runTimeRstop)
@@ -1224,10 +1196,10 @@ contains
             
          end if
          
-      !LIKWID_OFF('tloop')
       end do outer ! end of time stepping !
-      
       PERFOFF
+      PERF_CONTEXT_END
+      
       if ( l_movie ) then
          if ( rank == 0 ) then
             if (n_frame > 0) then

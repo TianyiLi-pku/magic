@@ -8,7 +8,16 @@ module algebra
 
    public :: prepare_mat, solve_mat
    
-   logical, parameter :: multiple_rhs = .false.
+   ! There might be a large difference between the solutions when using 
+   ! the multiple rhs in the lapack call (for some reason). It is hard 
+   ! to debug the code sometimes because of these differences. Set this flag 
+   ! for changing which method to use
+   ! 0: loops over each RHS individually (slowest, more precise)
+   ! 1: solves once for the real and once for the imaginary part (original version)
+   ! anything else: solves both real and imaginary at once in one 
+   !     block (optimized, different precision)
+   ! 
+   integer, parameter :: multiple_rhs_method = 2
 
    interface solve_mat
       module procedure solve_mat_real_rhs
@@ -74,10 +83,37 @@ contains
       complex(cp), intent(inout) :: rhs(:,:) ! on input RHS of problem
 
       !-- Local variables:
-      real(cp) :: tmpr(n,nRHSs), tmpi(n,nRHSs)
+      real(cp), allocatable :: tmpr(:,:), tmpi(:,:)
+      real(cp) :: norm_b, norm_diff
       integer :: info, i, j
       
-      if (multiple_rhs) then
+      ! There is a hack here to get deterministic solves - read the 
+      ! description of the multiple_rhs_method flag at the top of this 
+      ! module - Lago
+      ! 
+      !   Precise variant:
+      ! ------------------------------------------------------------------
+      if (multiple_rhs_method==0) then
+         allocate(tmpr(n,1), tmpi(n,1))
+         do j=1,nRHSs
+            tmpr(:,1) = real(rhs(:,j))
+            tmpi(:,1) = aimag(rhs(:,j))
+
+#if (DEFAULT_PRECISION==sngl)
+            call sgetrs('N',n,1,a(1:n,1:n),n,pivot(1:n),tmpr(1:n,1),n,info)
+            call sgetrs('N',n,1,a(1:n,1:n),n,pivot(1:n),tmpi(1:n,1),n,info)
+#elif (DEFAULT_PRECISION==dble)
+            call dgetrs('N',n,1,a(1:n,1:n),n,pivot(1:n),tmpr(1:n,1),n,info)
+            call dgetrs('N',n,1,a(1:n,1:n),n,pivot(1:n),tmpi(1:n,1),n,info)
+#endif
+
+            rhs(:,j)=cmplx(tmpr(:,1),tmpi(:,1),kind=cp)
+         end do
+      
+      !   Original Variant:
+      ! ------------------------------------------------------------------
+      else if (multiple_rhs_method==1) then
+         allocate(tmpr(n,nRHSs), tmpi(n,nRHSs))
          do j=1,nRHSs
             do i=1,n
                tmpr(i,j) = real(rhs(i,j))
@@ -98,32 +134,25 @@ contains
                rhs(i,j)=cmplx(tmpr(i,j),tmpi(i,j),kind=cp)
             end do
          end do
-      ! Hack to get exact match between sequential and distributed 
-      ! versions of the code!
-      ! This is not optimal and merely meant for debugging. 
-      ! Set the variable multiple_rhs=.true. to use the optimal 
-      ! variant
+         deallocate(tmpr,tmpi)
+      
+      !   Optimized Variant:
       ! ------------------------------------------------------------------
-      else 
-         do j=1,nRHSs
-            do i=1,n
-               tmpr(i,1) = real(rhs(i,j))
-               tmpi(i,1) = aimag(rhs(i,j))
-            end do
-
+      else
+         allocate(tmpr(n,2*nRHSs))
+         tmpr(1:n,1:nRHSs) = real(rhs(1:n,1:nRHSs))
+         tmpr(1:n,nRHSs+1:2*nRHSs) = aimag(rhs(1:n,1:nRHSs))
+         
 #if (DEFAULT_PRECISION==sngl)
-         call sgetrs('N',n,1,a(1:n,1:n),n,pivot(1:n),tmpr(1:n,1),n,info)
-         call sgetrs('N',n,1,a(1:n,1:n),n,pivot(1:n),tmpi(1:n,1),n,info)
+         call sgetrs('N',n,2*nRHSs,a(1:n,1:n),n,pivot(1:n),tmpr(1:n,1:2*nRHSs),n,info)
 #elif (DEFAULT_PRECISION==dble)
-         call dgetrs('N',n,1,a(1:n,1:n),n,pivot(1:n),tmpr(1:n,1),n,info)
-         call dgetrs('N',n,1,a(1:n,1:n),n,pivot(1:n),tmpi(1:n,1),n,info)
+         call dgetrs('N',n,2*nRHSs,a(1:n,1:n),n,pivot(1:n),tmpr(1:n,1:2*nRHSs),n,info)
 #endif
 
-            do i=1,n
-               rhs(i,j)=cmplx(tmpr(i,1),tmpi(i,1),kind=cp)
-            end do
-         end do
-      end if
+         rhs = cmplx(tmpr(1:n,1:nRHSs),tmpr(1:n,nRHSs+1:2*nRHSs))
+         deallocate(tmpr)
+      end if       
+         
 
    end subroutine solve_mat_complex_rhs_multi
 !-----------------------------------------------------------------------------

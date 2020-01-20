@@ -134,6 +134,7 @@ contains
       integer,     intent(in)     :: dir
       integer :: status
       
+      PERFON('fftphi')      
       if (dir == 1) then
          status = DftiComputeForward( phi2m_dhandle, f(:), g(:) )
       else if (dir == -1) then
@@ -141,6 +142,7 @@ contains
       else
          print *, "Unknown direction in fft_phi_loc: ", dir
       end if
+      PERFOFF
     
   end subroutine fft_phi_loc
 
@@ -153,7 +155,6 @@ contains
       real(cp), intent(inout) :: f(nrp,nfs)
       integer,  intent(in) :: dir            ! back or forth transform
 
-      PERFON('fft_thr')
       if (dir == -1) then
          ! run FFT
          status = DftiComputeForward( r2c_handle, f(:,1) )
@@ -164,7 +165,6 @@ contains
          ! run FFT
          status = DftiComputeBackward( c2r_handle, f(:,1) )
       end if
-      PERFOFF
 
    end subroutine fft_thetab
    !----------------------------------------------------------------------------
@@ -179,7 +179,6 @@ contains
       real(cp), allocatable :: work_array(:, :)
       allocate(work_array(ld_f+2, nrep))
 
-      PERFON('fft2r')
       ! Fourier transformation complex->REAL with MKL DFTI interface
       ! init FFT
       status = DftiCreateDescriptor( local_c2r_handle, DFTI_DOUBLE, &
@@ -197,7 +196,6 @@ contains
       deallocate(work_array)
 
       status = DftiFreeDescriptor( local_c2r_handle )
-      PERFOFF
 
    end subroutine fft_to_real
 end module fft

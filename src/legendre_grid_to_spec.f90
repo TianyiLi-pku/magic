@@ -48,7 +48,6 @@ contains
       complex(cp) :: f1ES(n_m_max,nfs/2),f1ES1,f1ES2
       complex(cp) :: f1EA(n_m_max,nfs/2),f1EA1,f1EA2
 
-      !PERFON('legTF1')
       !-- Unscrambles equatorially symmetric and antisymmetric contributions:
       nThetaNHS=0
       do nThetaN=1,sizeThetaB,2 ! thetas in NHS
@@ -111,7 +110,6 @@ contains
 
       end do  !  loop over theta in block
 
-      !PERFOFF
 
    end subroutine legTF1
 !------------------------------------------------------------------------
@@ -150,7 +148,6 @@ contains
       complex(cp) :: f2ES(n_m_max,nfs/2),f2ES1,f2ES2
       complex(cp) :: f2EA(n_m_max,nfs/2),f2EA1,f2EA2
 
-      !PERFON('legTF2')
       !-- Unscrambles equatorially symmetric and antisymmetric contributions:
       nThetaNHS=0
       do nThetaN=1,sizeThetaB,2 ! thetas in NHS
@@ -242,7 +239,6 @@ contains
 
       end do  !  loop over theta in block
 
-      !PERFOFF
 
    end subroutine legTF2
 !------------------------------------------------------------------------
@@ -283,7 +279,6 @@ contains
       complex(cp) :: f3ES(n_m_max,nfs/2),f3ES1,f3ES2
       complex(cp) :: f3EA(n_m_max,nfs/2),f3EA1,f3EA2
 
-      !PERFON('legTF3')
       !-- Unscrambles equatorially symmetric and antisymmetric contributions:
       nThetaNHS=0
       do nThetaN=1,sizeThetaB,2 ! thetas in NHS
@@ -404,7 +399,6 @@ contains
 
       end do  !  loop over theta in block
 
-      !PERFOFF
    end subroutine legTF3
 !------------------------------------------------------------------------
    subroutine legTF_spher_tor(nThetaStart,f1LM,f2LM,f1TM,f2TM)
@@ -441,7 +435,6 @@ contains
 
       real(cp) :: dm
 
-      !PERFON('legTF_spher_tor')
       !-- Unscrambles equatorially symmetric and antisymmetric contributions:
       nThetaNHS=0
       do nThetaN=1,sizeThetaB,2 ! thetas in NHS
@@ -578,7 +571,6 @@ contains
 
       end do  !  loop over theta in block
 
-      !PERFOFF
 
    end subroutine legTF_spher_tor
 !------------------------------------------------------------------------

@@ -12,9 +12,6 @@ module radialLoop
        &            l_b_nl_icb, l_b_nl_cmb, l_TP_form
    use constants, only: zero
    use parallel_mod, only: coord_r, n_ranks_r, rank
-#ifdef WITH_LIKWID
-#include "likwid_f90.h"
-#endif
    use rIteration_mod, only: rIteration_t
    use rIterThetaBlocking_mod, only: rIterThetaBlocking_t
    use rIterThetaBlocking_shtns_mod, only: rIterThetaBlocking_shtns_t
@@ -148,8 +145,6 @@ contains
       logical :: lGraphHeader    ! Write header into graph file
       logical :: isRadialBoundaryPoint
 
-      PERFON('rloop')
-      !LIKWID_ON('rloop')
       lGraphHeader=l_graph
       if ( lGraphHeader ) then
 #ifdef WITH_MPI
@@ -277,8 +272,6 @@ contains
       !----- Correct sign of mantel Lorentz torque (see above):
       lorentz_torque_ma=-lorentz_torque_ma
       
-      !LIKWID_OFF('rloop')
-      PERFOFF
    end subroutine radialLoopG
 !----------------------------------------------------------------------------
 end module radialLoop

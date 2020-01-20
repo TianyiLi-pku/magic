@@ -451,7 +451,8 @@ contains
       
       ! We start with the computation of the energies
       ! in parallel.
-      if ( l_log ) then
+      if ( .false. ) then
+!       if ( l_log ) then     UNCOMMENTMEEEEEEEEEE
          
          call transform_new2old(w_LMdist        , w_LMloc        )
          call transform_new2old(dw_LMdist       , dw_LMloc       )
@@ -474,13 +475,10 @@ contains
          
 
          !----- Write torques and rotation rates:
-         PERFON('out_rot')
          call write_rot( time,dt,eKinIC,eKinMA,w_LMloc,z_LMloc,dz_LMloc,b_LMloc,  &
               &          omega_ic,omega_ma,lorentz_torque_ic,lorentz_torque_ma)
-         PERFOFF
          if (DEBUG_OUTPUT) write(*,"(A,I6)") "Written  write_rot  on coord_r ",coord_r
   
-         PERFON('out_ekin')
          n_e_sets=n_e_sets+1
          call get_e_kin(time,.true.,l_stop_time,n_e_sets,w_LMloc,    &
               &         dw_LMloc,z_LMloc,e_kin_p,e_kin_t,e_kin_p_as, &
@@ -496,15 +494,12 @@ contains
               &         e_mag_os,e_mag_as_os,e_mag_cmb,Dip,DipCMB,elsAnel )
          e_mag   =e_mag_p+e_mag_t
          e_mag_ic=e_mag_p_ic+e_mag_t_ic
-         PERFOFF
          if ( DEBUG_OUTPUT ) write(*,"(A,I6)") "Written  e_mag  on coord_r ",coord_r
          
          !----- Calculate distribution of energies on all m's
          if ( l_energy_modes ) then  
-            PERFON('out_amplitude') 
             call get_amplitude(time,w_LMloc,dw_LMloc,z_LMloc,b_LMloc,&
                  &             db_LMloc,aj_LMloc)
-            PERFOFF
             if ( DEBUG_OUTPUT ) &
                & write(*,"(A,I6)") "Written  amplitude  on coord_r ",coord_r
          endif
@@ -529,7 +524,6 @@ contains
          
   
          if ( l_average ) then
-            PERFON('out_aver')
             call spectrum_average(nLogs,l_stop_time,timePassedLog,  &
                  &                timeNormLog,w_LMloc,z_LMloc,      &
                  &                dw_LMloc,'V')
@@ -548,14 +542,12 @@ contains
                  &              timeNormLog,omega_ic,omega_ma,w_LMloc,z_LMloc, &
                  &              p_LMloc,s_LMloc,xi_LMloc,b_LMloc,aj_LMloc,     &
                  &              b_ic_LMloc,aj_ic_LMloc)
-            PERFOFF
             if (DEBUG_OUTPUT) write(*,"(A,I6)") "Written  averages  on coord_r ",coord_r
          end if
          
          
          if ( l_power ) then
   
-            PERFON('out_pwr')
             if ( coord_r == 0 ) then
                if ( nLogs > 1 ) then
                   if ( l_save_out ) then
@@ -582,7 +574,6 @@ contains
                  &          b_LMloc,ddb_LMloc,aj_LMloc,dj_LMloc,db_ic_LMloc, &
                  &          ddb_ic_LMloc,aj_ic_LMloc,dj_ic_LMloc,viscLMr,    &
                  &          visDiss,ohmDiss)
-            PERFOFF
             if (DEBUG_OUTPUT) write(*,"(A,I6)") "Written  power  on coord_r ",coord_r
          end if
   
@@ -714,7 +705,6 @@ contains
   
       !--- Store poloidal magnetic coeffs at cmb
       if ( l_cmb ) then
-         PERFON('out_cmb')
          call write_Bcmb(timeScaled,b_LMloc(:,n_r_cmb),l_max_cmb,n_cmb_sets,   &
               &          cmb_file,n_cmb_file)
          
@@ -734,7 +724,6 @@ contains
             call write_Bcmb(timeScaled,dbdtCMB(:),l_max_cmb,n_dt_cmb_sets,  &
                  &          dt_cmb_file,n_dt_cmb_file)
          end if
-         PERFOFF
       end if
 
       if ( l_frame .and. l_cmb_field ) then
@@ -744,7 +733,6 @@ contains
 
       !--- Store potential coeffs for velocity fields and magnetic fields
       if ( l_outr ) then
-         PERFON('out_r')
          do n=1,n_coeff_r_max
             nR=n_coeff_r(n)
             call write_coeff_r(timeScaled,w_LMloc(:,nR),dw_LMloc(:,nR),  &
@@ -762,7 +750,6 @@ contains
                     &             l_max_r,n_T_r_sets(n),T_r_file(n),       &
                     &             n_t_r_file(n),3)
          end do
-         PERFOFF
       end if
   
       if ( l_Bpot )                                                          &
@@ -806,7 +793,6 @@ contains
       l_PVout = l_PV .and. l_log
   
       if ( l_frame .or. (l_graph .and. l_mag .and. n_r_ic_max > 0) ) then
-         PERFON('out_comm')
 
          if ( l_mag ) call gather_from_lo_to_rank0(b_LMloc(:,n_r_icb),bICB)
   
@@ -822,7 +808,6 @@ contains
   
          ! for writing a restart file, we also need the d?dtLast arrays, 
          ! which first have to be gathered on coord_r 0
-         PERFOFF
   
       end if
   
@@ -861,7 +846,6 @@ contains
       ! ======= compute output on coord_r 0 ==============
       ! =======================================================================
       if ( coord_r == 0 ) then
-         PERFON('out_out')
   
          !----- Plot out inner core magnetic field, outer core
          !      field has been written in radialLoop !
@@ -1063,7 +1047,6 @@ contains
          
          
          
-         PERFOFF
       end if
       
 
