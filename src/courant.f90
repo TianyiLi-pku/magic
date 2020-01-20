@@ -3,7 +3,7 @@ module courant_mod
    use parallel_mod
    use precision_mod
    use geometry, only: nrp, n_phi_max, l_theta, u_theta, &
-       &                 comm_theta, l_r, u_r
+       &                 comm_theta, nRstart, nRstop
    use radial_functions, only: orho1, orho2, or4, or2
    use physical_parameters, only: LFfac, opm
    use num_param, only: courfac, delxr2, delxh2, alffac
@@ -153,7 +153,7 @@ contains
       !-- Input variables:
       real(cp), intent(in) :: dt
       real(cp), intent(in) :: dtMax
-      real(cp), intent(in) :: dtrkc(l_r:u_r),dthkc(l_r:u_r)
+      real(cp), intent(in) :: dtrkc(nRstart:nRstop),dthkc(nRstart:nRstop)
     
       !-- Output variables:
       logical,  intent(out) :: l_new_dt
@@ -171,7 +171,7 @@ contains
       dt_fac=two
       dt_r  =1000.0_cp*dtMax
       dt_h  =dt_r
-      do n_r_loc=l_r,u_r
+      do n_r_loc=nRstart,nRstop
          dt_r=min(dtrkc(n_r_loc),dt_r)
          dt_h=min(dthkc(n_r_loc),dt_h)
       end do

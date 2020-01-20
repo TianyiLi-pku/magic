@@ -791,7 +791,7 @@ contains
                &                     O_dt*rscheme_oc%rMat(nR,nR_out)
 
 
-               !Advection of the background entropy l_r * dso/dr
+               !Advection of the background entropy nRstart * dso/dr
                wptMat(nR_t,nR_out)=rscheme_oc%rnorm*alpha*dLh*or2(nR)*temp0(nR)* &
                &                  dentropy0(nR)*orho1(nR)*rscheme_oc%rMat(nR,nR_out)
 
@@ -866,7 +866,7 @@ contains
                &        +ddLalpha0(nR)-dbeta(nR)-dLh*or2(nR) ) *                   &
                &                                      rscheme_oc%rMat(nR,nR_out) ) )
 
-               !Advection of the background entropy l_r * dso/dr
+               !Advection of the background entropy nRstart * dso/dr
                wptMat(nR_t,nR_out)=rscheme_oc%rnorm*alpha*dLh*or2(nR)*temp0(nR)* &
                &                   dentropy0(nR)*orho1(nR)*rscheme_oc%rMat(nR,nR_out)
 

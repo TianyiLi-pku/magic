@@ -135,17 +135,17 @@ module geometry
    integer, allocatable, protected :: dist_theta(:,:)
    integer, allocatable, protected :: dist_r(:,:), rB_tsid(:,:)
    integer, protected :: n_theta_loc, l_theta, u_theta
-   integer, protected :: n_r_loc, l_r, u_r
+   integer, protected :: n_r_loc, nRstart, nRstop
    
    !   Helpers
-   integer, protected :: l_r_Mag
-   integer, protected :: l_r_Che
-   integer, protected :: l_r_TP 
-   integer, protected :: l_r_DC 
-   integer, protected :: u_r_Mag 
-   integer, protected :: u_r_Che 
-   integer, protected :: u_r_TP  
-   integer, protected :: u_r_DC  
+   integer, protected :: nRstartMag
+   integer, protected :: nRstartChe
+   integer, protected :: nRstartTP 
+   integer, protected :: nRstartDC 
+   integer, protected :: nRstopMag 
+   integer, protected :: nRstopChe 
+   integer, protected :: nRstopTP  
+   integer, protected :: nRstopDC  
    integer, protected :: n_lmMag_loc
    integer, protected :: n_lmChe_loc
    integer, protected :: n_lmTP_loc
@@ -354,25 +354,25 @@ contains
       
       dist_r(:,0) = dist_r(:,2) - dist_r(:,1) + 1
       n_r_loc = dist_r(coord_r,0)
-      l_r = dist_r(coord_r,1)
-      u_r = dist_r(coord_r,2)
+      nRstart = dist_r(coord_r,1)
+      nRstop = dist_r(coord_r,2)
       
-      l_r_Mag = 1
-      l_r_Che = 1
-      l_r_TP  = 1
-      l_r_DC  = 1
-      u_r_Mag = 1
-      u_r_Che = 1
-      u_r_TP  = 1
-      u_r_DC  = 1
-      if (l_mag          ) l_r_Mag = l_r
-      if (l_chemical_conv) l_r_Che = l_r
-      if (l_TP_form      ) l_r_TP  = l_r
-      if (l_double_curl  ) l_r_DC  = l_r
-      if (l_mag          ) u_r_Mag = u_r
-      if (l_chemical_conv) u_r_Che = u_r
-      if (l_TP_form      ) u_r_TP  = u_r
-      if (l_double_curl  ) u_r_DC  = u_r
+      nRstartMag = 1
+      nRstartChe = 1
+      nRstartTP  = 1
+      nRstartDC  = 1
+      nRstopMag = 1
+      nRstopChe = 1
+      nRstopTP  = 1
+      nRstopDC  = 1
+      if (l_mag          ) nRstartMag = nRstart
+      if (l_chemical_conv) nRstartChe = nRstart
+      if (l_TP_form      ) nRstartTP  = nRstart
+      if (l_double_curl  ) nRstartDC  = nRstart
+      if (l_mag          ) nRstopMag = nRstop
+      if (l_chemical_conv) nRstopChe = nRstop
+      if (l_TP_form      ) nRstopTP  = nRstop
+      if (l_double_curl  ) nRstopDC  = nRstop
       
    end subroutine distribute_gs
    

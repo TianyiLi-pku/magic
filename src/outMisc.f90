@@ -8,7 +8,7 @@ module outMisc_mod
    use precision_mod
    use mem_alloc, only: bytes_allocated
    use geometry, only: l_max, n_r_max, lm_max, n_r_icb, dist_r,&
-       &                 n_r_cmb, l_r, u_r
+       &                 n_r_cmb, nRstart, nRstop
    use radial_functions, only: r_icb, rscheme_oc, kappa,         &
        &                       r_cmb,temp0, r, rho0, dLtemp0,    &
        &                       dLalpha0, beta, orho1, alpha0,    &
@@ -88,18 +88,18 @@ contains
 
       !-- Input of variables:
       real(cp), intent(in) :: timeScaled
-      real(cp), intent(in) :: HelLMr(l_max+1,l_r:u_r)
-      real(cp), intent(in) :: Hel2LMr(l_max+1,l_r:u_r)
-      real(cp), intent(in) :: HelnaLMr(l_max+1,l_r:u_r)
-      real(cp), intent(in) :: Helna2LMr(l_max+1,l_r:u_r)
+      real(cp), intent(in) :: HelLMr(l_max+1,nRstart:nRstop)
+      real(cp), intent(in) :: Hel2LMr(l_max+1,nRstart:nRstop)
+      real(cp), intent(in) :: HelnaLMr(l_max+1,nRstart:nRstop)
+      real(cp), intent(in) :: Helna2LMr(l_max+1,nRstart:nRstop)
     
       !-- Local stuff:
       integer :: nTheta,nThetaStart,nThetaBlock,nThetaNHS,n
-      real(cp) :: HelNr(l_r:u_r), HelSr(l_r:u_r)
-      real(cp) :: HelnaNr(l_r:u_r), HelnaSr(l_r:u_r)
-      real(cp) :: Hel2Nr(l_r:u_r), Hel2Sr(l_r:u_r)
-      real(cp) :: Helna2Nr(l_r:u_r), Helna2Sr(l_r:u_r)
-      real(cp) :: HelEAr(l_r:u_r)
+      real(cp) :: HelNr(nRstart:nRstop), HelSr(nRstart:nRstop)
+      real(cp) :: HelnaNr(nRstart:nRstop), HelnaSr(nRstart:nRstop)
+      real(cp) :: Hel2Nr(nRstart:nRstop), Hel2Sr(nRstart:nRstop)
+      real(cp) :: Helna2Nr(nRstart:nRstop), Helna2Sr(nRstart:nRstop)
+      real(cp) :: HelEAr(nRstart:nRstop)
       real(cp) :: HelNr_global(n_r_max), HelSr_global(n_r_max)
       real(cp) :: HelnaNr_global(n_r_max), HelnaSr_global(n_r_max)
       real(cp) :: Helna2Nr_global(n_r_max), Helna2Sr_global(n_r_max)
@@ -117,7 +117,7 @@ contains
     
       !------ Integration of Helicity, on input the Helicity is
       !       already axisymmetric !
-      do n_r=l_r,u_r
+      do n_r=nRstart,nRstop
          r2=r(n_r)*r(n_r)
          HelNr(n_r)   =0.0_cp
          HelSr(n_r)   =0.0_cp

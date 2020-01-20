@@ -14,7 +14,7 @@ module probe_mod
 
    use parallel_mod, only: coord_r, rank 
    use precision_mod
-   use geometry, only: n_r_max, n_phi_max, nrp, l_r, u_r
+   use geometry, only: n_r_max, n_phi_max, nrp, nRstart, nRstop
    use radial_functions, only: r_cmb, orho1, or1, or2, r, r_icb
    use num_param, only: vScale
    use blocking, only: nThetaBs, sizeThetaB, nfs
@@ -50,7 +50,7 @@ contains
 
       rad_usr = minloc(abs(r_probe - r),1)
 
-      if((l_r <= rad_usr) .and. (rad_usr <= u_r)) then
+      if((nRstart <= rad_usr) .and. (rad_usr <= nRstop)) then
          if ( .not. l_save_out )                                       &
          &  open(newunit=n_out_probes, file=probe_file, status='new')
          rad_rank = coord_r

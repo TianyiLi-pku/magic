@@ -5,7 +5,7 @@ module outTO_mod
    use mem_alloc, only: bytes_allocated
    use geometry, only: n_r_max, n_r_maxStr, n_theta_maxStr, l_max, &
        &                 n_theta_max, n_phi_max, minc, lStressMem,   &
-       &                 lm_max, l_r, u_r, n_r_loc, dist_r
+       &                 lm_max, nRstart, nRstop, n_r_loc, dist_r
    use radial_functions, only: r_ICB, rscheme_oc, r, r_CMB, orho1, rscheme_oc
    use physical_parameters, only: ra, ek, pr, prmag, radratio, LFfac
    use torsional_oscillations, only: BpzAS_Rloc, BspdAS_Rloc, BpsdAS_Rloc, &
@@ -99,16 +99,16 @@ contains
       integer :: nS_remaining
 
       !-- R-distributed arrays
-      allocate( V2LMr_Rloc(l_max+1,l_r:u_r) )
-      allocate( Bs2LMr_Rloc(l_max+1,l_r:u_r) )
-      allocate( BszLMr_Rloc(l_max+1,l_r:u_r) )
-      allocate( BspLMr_Rloc(l_max+1,l_r:u_r) )
-      allocate( BpzLMr_Rloc(l_max+1,l_r:u_r) )
-      allocate( BspdLMr_Rloc(l_max+1,l_r:u_r) )
-      allocate( BpsdLMr_Rloc(l_max+1,l_r:u_r) )
-      allocate( BzpdLMr_Rloc(l_max+1,l_r:u_r) )
-      allocate( BpzdLMr_Rloc(l_max+1,l_r:u_r) )
-      bytes_allocated=bytes_allocated+9*(u_r-l_r+1)*(l_max+1)* &
+      allocate( V2LMr_Rloc(l_max+1,nRstart:nRstop) )
+      allocate( Bs2LMr_Rloc(l_max+1,nRstart:nRstop) )
+      allocate( BszLMr_Rloc(l_max+1,nRstart:nRstop) )
+      allocate( BspLMr_Rloc(l_max+1,nRstart:nRstop) )
+      allocate( BpzLMr_Rloc(l_max+1,nRstart:nRstop) )
+      allocate( BspdLMr_Rloc(l_max+1,nRstart:nRstop) )
+      allocate( BpsdLMr_Rloc(l_max+1,nRstart:nRstop) )
+      allocate( BzpdLMr_Rloc(l_max+1,nRstart:nRstop) )
+      allocate( BpzdLMr_Rloc(l_max+1,nRstart:nRstop) )
+      bytes_allocated=bytes_allocated+9*(nRstop-nRstart+1)*(l_max+1)* &
       &               SIZEOF_DEF_REAL
 
       !-- Global arrays
@@ -390,7 +390,7 @@ contains
 
       !--- Transform to lm-space for all radial grid points:
 
-      do nR=l_r,u_r
+      do nR=nRstart,nRstop
          do n=1,nThetaBs
             nThetaStart=(n-1)*sizeThetaB+1
             call legTFAS(V2LMr_Rloc(:,nR),V2AS_Rloc(nThetaStart,nR),               &

@@ -4,7 +4,7 @@ module movie_data
    use precision_mod
    use geometry, only: n_r_max, n_theta_max, n_phi_max,      &
        &                 ldtBMem, minc, n_r_ic_max, lMovieMem, &
-       &                 n_r_tot, l_r,u_r, n_r_icb, n_r_cmb,   &
+       &                 n_r_tot, nRstart,nRstop, n_r_icb, n_r_cmb,   &
        &                 n_r_loc, dist_r
    use logic, only:  l_store_frame, l_save_out, l_movie, &
                      l_movie_oc, l_movie_ic, l_HTmovie,  &
@@ -1323,7 +1323,7 @@ contains
 
          else if ( n_surface == 0 ) then ! 3d
             ! 3d, all grid points written to frames
-            ! but only n_r_loc=l_r:u_r on one coord_r,
+            ! but only n_r_loc=nRstart:nRstop on one coord_r,
             ! gather needed
             do n_field=1,n_fields
                n_start = n_movie_field_start(n_field,n_movie)
@@ -1337,7 +1337,7 @@ contains
             n_stop =n_movie_field_stop(n_fields,n_movie)
             myTag=7654
             if (coord_r == 0) then
-               if ((l_r <= n_const) .and. (n_const <= u_r)) then
+               if ((nRstart <= n_const) .and. (n_const <= nRstop)) then
                   ! relevant frames already set on coord_r 0
                   ! do nothing
                else
@@ -1345,7 +1345,7 @@ contains
                        & MPI_ANY_SOURCE,mytag,comm_r,status,ierr)
                end if
             else
-               if ((l_r <= n_const) .and. (n_const <= u_r)) then
+               if ((nRstart <= n_const) .and. (n_const <= nRstop)) then
                   ! relevant frames are all on this coord_r  /= 0
                   ! send to coord_r 0
                   call MPI_Send(frames(n_start),n_stop-n_start+1,MPI_DEF_REAL,&
@@ -1359,7 +1359,7 @@ contains
                n_stop  = n_movie_field_stop(n_field,n_movie)
                field_length = n_stop-n_start+1
 
-               local_start=n_start+(l_r-1)*n_phi_max
+               local_start=n_start+(nRstart-1)*n_phi_max
                local_end  =local_start+n_r_loc*n_phi_max-1
                if (local_end > n_stop) then
                   call abortRun('local_end exceeds n_stop')
@@ -1385,7 +1385,7 @@ contains
                n_stop  = n_movie_field_stop(n_field,n_movie)
                field_length = n_stop-n_start+1
 
-               local_start=n_start+(l_r-1)*n_theta_max
+               local_start=n_start+(nRstart-1)*n_theta_max
                local_end  =local_start+n_r_loc*n_theta_max-1
 
                if (local_end > n_stop) then

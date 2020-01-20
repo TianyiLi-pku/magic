@@ -268,7 +268,7 @@ contains
       !      send_buf({i1,i2,i3,...}, j, k)
       !   Then we resize it, so that it has the length of the first dimension. Next
       !   we build an vector type out of it obtaining
-      !      send_buf({i1,i2,i3,...}, l_r:u_r, k)
+      !      send_buf({i1,i2,i3,...}, nRstart:nRstop, k)
       !   Finally, we resize that, so that it comprises the whole data for a single 
       !   variable. Since we send the whole containers at once, we will be sending
       !   and array of those last types
@@ -586,9 +586,9 @@ contains
 
 
       ! allocate a temporary array for the gather operations.
-      allocate(temp_r2lo(lm_max,l_r:u_r))
+      allocate(temp_r2lo(lm_max,nRstart:nRstop))
       bytes_allocated = bytes_allocated + &
-                        lm_max*(u_r-l_r+1)*SIZEOF_DEF_COMPLEX
+                        lm_max*(nRstop-nRstart+1)*SIZEOF_DEF_COMPLEX
       if ( coord_r == 0 ) then
          allocate(temp_gather_lo(1:lm_max))
          bytes_allocated = bytes_allocated + lm_max*SIZEOF_DEF_COMPLEX
@@ -1048,9 +1048,9 @@ contains
       allocate(self%final_wait_array(2*(n_ranks_r-1)))
       bytes_allocated = bytes_allocated+4*(n_ranks_r-1)*SIZEOF_INTEGER
 #endif
-      allocate(self%temp_Rloc(1:lm_max,l_r:u_r,1:self%count))
+      allocate(self%temp_Rloc(1:lm_max,nRstart:nRstop,1:self%count))
       bytes_allocated = bytes_allocated+&
-                        lm_max*(u_r-l_r+1)*self%count*SIZEOF_DEF_COMPLEX
+                        lm_max*(nRstop-nRstart+1)*self%count*SIZEOF_DEF_COMPLEX
 
    end subroutine create_lm2r_type
 !-------------------------------------------------------------------------------
@@ -1083,9 +1083,9 @@ contains
       allocate(self%final_wait_array(2*(n_ranks_r-1)))
       bytes_allocated = bytes_allocated+4*(n_ranks_r-1)*SIZEOF_INTEGER
 #endif
-      allocate(self%temp_Rloc(1:lm_max,l_r:u_r,1:self%count))
+      allocate(self%temp_Rloc(1:lm_max,nRstart:nRstop,1:self%count))
       bytes_allocated = bytes_allocated+&
-                        lm_max*(u_r-l_r+1)*self%count*SIZEOF_DEF_COMPLEX
+                        lm_max*(nRstop-nRstart+1)*self%count*SIZEOF_DEF_COMPLEX
 
    end subroutine create_r2lm_type
 !-------------------------------------------------------------------------------
@@ -1108,7 +1108,7 @@ contains
 
       type(lm2r_type) :: self
       complex(cp), intent(in)  :: arr_LMloc(llm:ulm,n_r_max,*)
-      complex(cp), intent(out) :: arr_Rloc(lm_max,l_r:u_r,*)
+      complex(cp), intent(out) :: arr_Rloc(lm_max,nRstart:nRstop,*)
 
       integer :: i
 #ifdef WITH_MPI
@@ -1132,7 +1132,7 @@ contains
          do irank=0,n_ranks_r-1
             !if (coord_r == irank) then
             ! just copy
-            !   arr_LMLoc(llm:ulm,l_r:u_r)=arr_Rloc(llm:ulm,l_r:u_r)
+            !   arr_LMLoc(llm:ulm,nRstart:nRstop)=arr_Rloc(llm:ulm,nRstart:nRstop)
             !else
             ! send_pe: send to this coord_r
             ! recv_pe: receive from this coord_r
@@ -1142,17 +1142,17 @@ contains
             if (coord_r == send_pe) then
                ! just copy
                do i=1,self%count
-                  arr_Rloc(llm:ulm,l_r:u_r,i)= &
-                       arr_LMloc(llm:ulm,l_r:u_r,i)
+                  arr_Rloc(llm:ulm,nRstart:nRstop,i)= &
+                       arr_LMloc(llm:ulm,nRstart:nRstop,i)
                end do
             else
                !if (recv_pe == n_ranks_r-1) then
-               !   call MPI_Irecv(arr_Rloc(lmStartB(recv_pe+1),l_r,1),   &
+               !   call MPI_Irecv(arr_Rloc(lmStartB(recv_pe+1),nRstart,1),   &
                !        &         1,s_transfer_type_cont(n_ranks_r,self%count),&
                !        &         recv_pe,transfer_tag,comm_r,       &
                !        &         self%r_request(irank),ierr)
                !else
-                  call MPI_Irecv(arr_Rloc(lmStartB(recv_pe+1),l_r,1),     &
+                  call MPI_Irecv(arr_Rloc(lmStartB(recv_pe+1),nRstart,1),     &
                        &         1,s_transfer_type_cont(recv_pe+1,self%count),&
                        &         recv_pe,transfer_tag,comm_r,         &
                        &         self%r_request(irank),ierr)
@@ -1193,11 +1193,11 @@ contains
             if (coord_r == send_pe) then
                ! just copy
                do i=1,self%count
-                  arr_Rloc(llm:ulm,l_r:u_r,i)= &
-                        arr_LMloc(llm:ulm,l_r:u_r,i)
+                  arr_Rloc(llm:ulm,nRstart:nRstop,i)= &
+                        arr_LMloc(llm:ulm,nRstart:nRstop,i)
                end do
             else
-               call MPI_Irecv(arr_Rloc(lmStartB(recv_pe+1),l_r,1),            &
+               call MPI_Irecv(arr_Rloc(lmStartB(recv_pe+1),nRstart,1),            &
                     &         1,s_transfer_type_nr_end_cont(recv_pe+1,self%count),&
                     &         recv_pe,transfer_tag,comm_r,                &
                     &         self%r_request(irank),ierr)
@@ -1221,7 +1221,7 @@ contains
       PERFOFF
 #else
       do i=1,self%count
-         arr_Rloc(llm:ulm,l_r:u_r,i)= arr_LMloc(llm:ulm,l_r:u_r,i)
+         arr_Rloc(llm:ulm,nRstart:nRstop,i)= arr_LMloc(llm:ulm,nRstart:nRstop,i)
       end do
 #endif
 
@@ -1248,12 +1248,12 @@ contains
 
       type(lm2r_type) :: self
       complex(cp), intent(in) :: arr_lo(llm:ulm,1:n_r_max,*)
-      complex(cp), target, intent(out) :: arr_Rloc(1:lm_max,l_r:u_r,*)
+      complex(cp), target, intent(out) :: arr_Rloc(1:lm_max,nRstart:nRstop,*)
   
       PERFON('lo2r_s')
       !call lm2r_redist(arr_lo,temp_lo)
-      self%arr_Rloc(1:,l_r:,1:) => arr_Rloc(1:lm_max,l_r:u_r,1:self%count)
-      !self%arr_Rloc(1:,l_r:) => arr_Rloc(1:,l_r:)
+      self%arr_Rloc(1:,nRstart:,1:) => arr_Rloc(1:lm_max,nRstart:nRstop,1:self%count)
+      !self%arr_Rloc(1:,nRstart:) => arr_Rloc(1:,nRstart:)
       call lm2r_redist_start(self,arr_lo,self%temp_Rloc)
       PERFOFF
 
@@ -1263,11 +1263,11 @@ contains
 
       type(lm2r_type) :: self
       complex(cp), intent(in) :: arr_lo(llm:ulm,1:n_r_max,*)
-      complex(cp), target, intent(out) :: arr_dist(1:n_lm_loc,l_r:u_r,*)
+      complex(cp), target, intent(out) :: arr_dist(1:n_lm_loc,nRstart:nRstop,*)
   
       PERFON('nlm2r_s')
       !call lm2r_redist(arr_lo,temp_lo)
-      self%arr_Rloc(1:,l_r:,1:) => arr_dist(1:n_lm_loc,l_r:u_r,1:self%count)
+      self%arr_Rloc(1:,nRstart:,1:) => arr_dist(1:n_lm_loc,nRstart:nRstop,1:self%count)
       call lm2r_redist_start(self,arr_lo,self%temp_Rloc)
       PERFOFF
 
@@ -1287,7 +1287,7 @@ contains
       ! now reorder to the original ordering
       if ( .not. l_axi ) then
          do i=1,self%count
-            do nR=l_r,u_r
+            do nR=nRstart,nRstop
                do l=0,l_max
                   do m=0,l,minc
                      self%arr_Rloc(map_glbl_st%lm2(l,m),nR,i) = &
@@ -1298,7 +1298,7 @@ contains
          end do
       else
          do i=1,self%count
-            do nR=l_r,u_r
+            do nR=nRstart,nRstop
                do l=0,l_max
                   self%arr_Rloc(map_glbl_st%lm2(l,0),nR,i) = &
                          self%temp_Rloc(lo_map%lm2(l,0),nR,i)
@@ -1323,7 +1323,7 @@ contains
       ! now reorder to the original ordering
       if ( .not. l_axi ) then
          do i=1,self%count
-            do nR=l_r,u_r
+            do nR=nRstart,nRstop
                do lm=1,n_lm_loc
                   l = map_dist_st%lm2l(lm)
                   m = map_dist_st%lm2m(lm)
@@ -1333,7 +1333,7 @@ contains
          end do
       else
          do i=1,self%count
-            do nR=l_r,u_r
+            do nR=nRstart,nRstop
                if (map_dist_st%lm2(0,0) > 0) then
                   do l=0,l_max
                      self%arr_Rloc(map_dist_st%lm2(l,0),nR,i) = &
@@ -1350,7 +1350,7 @@ contains
    subroutine r2lm_redist_start(self,arr_rloc,arr_LMloc)
 
       type(r2lm_type) :: self
-      complex(cp), intent(in) :: arr_Rloc(lm_max,l_r:u_r,*)
+      complex(cp), intent(in) :: arr_Rloc(lm_max,nRstart:nRstop,*)
       complex(cp), intent(out) :: arr_LMloc(llm:ulm,n_r_max,*)
   
       integer :: i
@@ -1366,7 +1366,7 @@ contains
          do irank=0,n_ranks_r-1
             !if (coord_r == irank) then
             ! just copy
-            !   arr_LMLoc(llm:ulm,l_r:u_r)=arr_Rloc(llm:ulm,l_r:u_r)
+            !   arr_LMLoc(llm:ulm,nRstart:nRstop)=arr_Rloc(llm:ulm,nRstart:nRstop)
             !else
             ! send_pe: send to this coord_r
             ! recv_pe: receive from this coord_r
@@ -1374,11 +1374,11 @@ contains
             recv_pe = modulo(coord_r-irank+n_ranks_r,n_ranks_r)
             if (coord_r == send_pe) then
                do i=1,self%count
-                  arr_LMLoc(llm:ulm,l_r:u_r,i)= &
-                            arr_Rloc(llm:ulm,l_r:u_r,i)
+                  arr_LMLoc(llm:ulm,nRstart:nRstop,i)= &
+                            arr_Rloc(llm:ulm,nRstart:nRstop,i)
                end do
             else
-               call MPI_Isend(arr_Rloc(lmStartB(send_pe+1),l_r,1),     &
+               call MPI_Isend(arr_Rloc(lmStartB(send_pe+1),nRstart,1),     &
                     &         1,s_transfer_type_cont(send_pe+1,self%count),&
                     &         send_pe,transfer_tag,comm_r,         &
                     &         self%s_request(irank),ierr)
@@ -1418,8 +1418,8 @@ contains
             if (coord_r == send_pe) then
                ! just copy
                do i=1,self%count
-                  arr_LMLoc(llm:ulm,l_r:u_r,i)= &
-                  &        arr_Rloc(llm:ulm,l_r:u_r,i)
+                  arr_LMLoc(llm:ulm,nRstart:nRstop,i)= &
+                  &        arr_Rloc(llm:ulm,nRstart:nRstop,i)
                end do
             else
                !-- TODO
@@ -1429,7 +1429,7 @@ contains
                     &         1,r_transfer_type_cont(coord_r+1,self%count), &
                     &         recv_pe,transfer_tag,comm_r,       &
                     &         self%r_request(irank),ierr)
-               call MPI_Isend(arr_Rloc(lmStartB(send_pe+1),l_r,1),            &
+               call MPI_Isend(arr_Rloc(lmStartB(send_pe+1),nRstart,1),            &
                     &         1,s_transfer_type_nr_end_cont(send_pe+1,self%count),&
                     &         send_pe,transfer_tag,comm_r,                &
                     &         self%s_request(irank),ierr)
@@ -1448,7 +1448,7 @@ contains
       !write(*,"(A)") "----------- end   r2lm_redist -------------"
 #else
       do i=1,self%count
-         arr_LMLoc(llm:ulm,l_r:u_r,i)=arr_Rloc(llm:ulm,l_r:u_r,i)
+         arr_LMLoc(llm:ulm,nRstart:nRstop,i)=arr_Rloc(llm:ulm,nRstart:nRstop,i)
       end do
 #endif
 
@@ -1474,19 +1474,19 @@ contains
    subroutine r2lo_redist_start(self,arr_Rloc,arr_lo)
 
       type(r2lm_type) :: self
-      complex(cp), intent(in) :: arr_Rloc(1:lm_max,l_r:u_r,*)
+      complex(cp), intent(in) :: arr_Rloc(1:lm_max,nRstart:nRstop,*)
       complex(cp), intent(out) :: arr_lo(llm:ulm,1:n_r_max,*)
   
       ! Local variables
       integer :: nR,l,m,i
 
       PERFON('r2lo_s')
-      self%temp_Rloc(1:,l_r:,1:) = arr_Rloc(1:lm_max,l_r:u_r,1:self%count)
+      self%temp_Rloc(1:,nRstart:,1:) = arr_Rloc(1:lm_max,nRstart:nRstop,1:self%count)
   
       ! Just copy the array with permutation
       if ( .not. l_axi ) then
          do i=1,self%count
-            do nR=l_r,u_r
+            do nR=nRstart,nRstop
                do l=0,l_max
                   do m=0,l,minc
                      self%temp_Rloc(lo_map%lm2(l,m),nR,i) = & 
@@ -1497,7 +1497,7 @@ contains
          end do
       else
          do i=1,self%count
-            do nR=l_r,u_r
+            do nR=nRstart,nRstop
                do l=0,l_max
                   self%temp_Rloc(lo_map%lm2(l,0),nR,i) = & 
                                    arr_Rloc(map_glbl_st%lm2(l,0),nR,i)
@@ -1518,7 +1518,7 @@ contains
       ! 
 
       type(r2lm_type) :: self
-      complex(cp), intent(in) :: arr_dist(1:n_lm_loc,l_r:u_r,*)
+      complex(cp), intent(in) :: arr_dist(1:n_lm_loc,nRstart:nRstop,*)
       complex(cp), intent(out) :: arr_lo(llm:ulm,1:n_r_max,*)
   
       ! Local variables
@@ -1526,12 +1526,12 @@ contains
       complex(cp) :: tmp_glb(1:lm_max)
       
       PERFON('nr2lo_s')
-!       self%temp_Rloc(1:,l_r:,1:) = arr_Rloc(1:lm_max,l_r:u_r,1:self%count)
+!       self%temp_Rloc(1:,nRstart:,1:) = arr_Rloc(1:lm_max,nRstart:nRstop,1:self%count)
   
       ! Just copy the array with permutation
       if ( .not. l_axi ) then
          do i=1,self%count
-            do nR=l_r,u_r
+            do nR=nRstart,nRstop
                call gather_Flm(arr_dist(1:n_lm_loc,nR,i), tmp_glb(1:lm_max))
                self%temp_Rloc(1:lm_max,nR,i) = tmp_glb(1:lm_max)
                do l=0,l_max
@@ -1544,7 +1544,7 @@ contains
 !          stop
       else
          do i=1,self%count
-            do nR=l_r,u_r
+            do nR=nRstart,nRstop
                call gather_Flm(arr_dist(1:n_lm_loc,nR,i), tmp_glb(1:lm_max))
                self%temp_Rloc(1:lm_max,nR,i) = tmp_glb(1:lm_max)
                do l=0,l_max
@@ -1986,7 +1986,7 @@ contains
    subroutine transpose_ml2r_start(self, container_ml, container_rm, n_fields)
       class(ml2r_transp), intent(inout) :: self
       integer,            intent(in)    :: n_fields
-      complex(cp),        intent(inout) :: container_rm(n_lm_loc, l_r:u_r, n_fields)
+      complex(cp),        intent(inout) :: container_rm(n_lm_loc, nRstart:nRstop, n_fields)
       complex(cp),        intent(in)    :: container_ml(n_mlo_loc, n_r_max, n_fields)
       
       integer :: i, j, k, icoord_mlo, icoord_r, il_r, ierr
@@ -2010,7 +2010,7 @@ contains
       do i=1,size(ml2r_loc_dspl,1)
          k = ml2r_loc_dspl(i,1)
          j = ml2r_loc_dspl(i,2)
-         container_rm(j,l_r:u_r,1:n_fields) = container_ml(k,l_r:u_r,1:n_fields)
+         container_rm(j,nRstart:nRstop,1:n_fields) = container_ml(k,nRstart:nRstop,1:n_fields)
       end do
       PERFOFF
       
@@ -2036,7 +2036,7 @@ contains
       class(r2lm_transp), intent(inout) :: self
       integer,            intent(in)    :: n_fields
       complex(cp),        intent(inout) :: container_ml(n_mlo_loc, n_r_max, n_fields)
-      complex(cp),        intent(in)    :: container_rm(n_lm_loc, l_r:u_r, n_fields)
+      complex(cp),        intent(in)    :: container_rm(n_lm_loc, nRstart:nRstop, n_fields)
       
       integer :: i, j, k, icoord_mlo, icoord_r, il_r, ierr
       
@@ -2059,7 +2059,7 @@ contains
       do i=1,size(ml2r_loc_dspl,1)
          k = ml2r_loc_dspl(i,1)
          j = ml2r_loc_dspl(i,2)
-         container_ml(k,l_r:u_r,1:n_fields) = container_rm(j,l_r:u_r,1:n_fields)
+         container_ml(k,nRstart:nRstop,1:n_fields) = container_rm(j,nRstart:nRstop,1:n_fields)
       end do
       PERFOFF
    end subroutine transpose_r2lm_start

@@ -5,7 +5,7 @@ module output_mod
    use parallel_mod
    use mem_alloc, only: bytes_allocated
    use geometry, only: n_r_max, n_r_ic_max, minc, l_max, l_maxMag,     &
-       &                 n_r_maxMag, lm_max, l_r, u_r, l_r_Mag, u_r_Mag, &
+       &                 n_r_maxMag, lm_max, nRstart, nRstop, nRstartMag, nRstopMag, &
        &                 n_r_cmb, n_r_icb
    use radial_functions, only: or1, or2, r, rscheme_oc, r_cmb, r_icb,  &
        &                       orho1, sigma
@@ -386,23 +386,23 @@ contains
       !    for calculating axisymmetric helicity.
       !    Parallelization note: These fields are R-distribute on input 
       !    and must also be collected on the processor performing this routine.
-      real(cp),    intent(in) :: HelLMr(l_max+1,l_r:u_r)
-      real(cp),    intent(in) :: Hel2LMr(l_max+1,l_r:u_r)
-      real(cp),    intent(in) :: HelnaLMr(l_max+1,l_r:u_r)
-      real(cp),    intent(in) :: Helna2LMr(l_max+1,l_r:u_r)
-      real(cp),    intent(in) :: viscLMr(l_max+1,l_r:u_r)
-      real(cp),    intent(in) :: uhLMr(l_max+1,l_r:u_r)
-      real(cp),    intent(in) :: gradsLMr(l_max+1,l_r:u_r)
-      real(cp),    intent(in) :: duhLMr(l_max+1,l_r:u_r)
-      real(cp),    intent(in) :: fconvLMr(l_max+1,l_r:u_r)
-      real(cp),    intent(in) :: fkinLMr(l_max+1,l_r:u_r)
-      real(cp),    intent(in) :: fviscLMr(l_max+1,l_r:u_r)
-      real(cp),    intent(in) :: fpoynLMr(l_maxMag+1,l_r_Mag:u_r_Mag)
-      real(cp),    intent(in) :: fresLMr(l_maxMag+1,l_r_Mag:u_r_Mag)
-      real(cp),    intent(in) :: EperpLMr(l_max+1,l_r:u_r)
-      real(cp),    intent(in) :: EparLMr(l_max+1,l_r:u_r)
-      real(cp),    intent(in) :: EperpaxiLMr(l_max+1,l_r:u_r)
-      real(cp),    intent(in) :: EparaxiLMr(l_max+1,l_r:u_r)
+      real(cp),    intent(in) :: HelLMr(l_max+1,nRstart:nRstop)
+      real(cp),    intent(in) :: Hel2LMr(l_max+1,nRstart:nRstop)
+      real(cp),    intent(in) :: HelnaLMr(l_max+1,nRstart:nRstop)
+      real(cp),    intent(in) :: Helna2LMr(l_max+1,nRstart:nRstop)
+      real(cp),    intent(in) :: viscLMr(l_max+1,nRstart:nRstop)
+      real(cp),    intent(in) :: uhLMr(l_max+1,nRstart:nRstop)
+      real(cp),    intent(in) :: gradsLMr(l_max+1,nRstart:nRstop)
+      real(cp),    intent(in) :: duhLMr(l_max+1,nRstart:nRstop)
+      real(cp),    intent(in) :: fconvLMr(l_max+1,nRstart:nRstop)
+      real(cp),    intent(in) :: fkinLMr(l_max+1,nRstart:nRstop)
+      real(cp),    intent(in) :: fviscLMr(l_max+1,nRstart:nRstop)
+      real(cp),    intent(in) :: fpoynLMr(l_maxMag+1,nRstartMag:nRstopMag)
+      real(cp),    intent(in) :: fresLMr(l_maxMag+1,nRstartMag:nRstopMag)
+      real(cp),    intent(in) :: EperpLMr(l_max+1,nRstart:nRstop)
+      real(cp),    intent(in) :: EparLMr(l_max+1,nRstart:nRstop)
+      real(cp),    intent(in) :: EperpaxiLMr(l_max+1,nRstart:nRstop)
+      real(cp),    intent(in) :: EparaxiLMr(l_max+1,nRstart:nRstop)
 
       complex(cp), intent(in) :: dbdt_CMB_LMloc(llmMag:ulmMag)
   

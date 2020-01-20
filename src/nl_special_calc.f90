@@ -234,8 +234,8 @@ contains
       !
       !   Calculates the fluxes:
       !
-      !     * Convective flux: :math:`F_c= \rho T (l_r s)`
-      !     * Kinetic flux: :math:`F_k = 1/2\,\rho l_r (l_r^2+u_\theta^2+u_\phi^2)`
+      !     * Convective flux: :math:`F_c= \rho T (nRstart s)`
+      !     * Kinetic flux: :math:`F_k = 1/2\,\rho nRstart (nRstart^2+u_\theta^2+u_\phi^2)`
       !     * Viscous flux: :math:`F_= -(u \cdot S )_r`)
       !
       !   If the run is magnetic, then this routine also computes:

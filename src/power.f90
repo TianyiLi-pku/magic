@@ -4,7 +4,7 @@ module power
    use precision_mod
    use mem_alloc, only: bytes_allocated
    use geometry, only: n_r_ic_maxMag, n_r_max, n_r_ic_max, l_max, &
-       &                 n_r_maxMag, n_r_icb, n_r_cmb, l_r, u_r,    &
+       &                 n_r_maxMag, n_r_icb, n_r_cmb, nRstart, nRstop,    &
        &                 dist_r, n_r_loc
    use radial_functions, only: r_cmb, r_icb, r, rscheme_oc, chebt_ic, &
        &                       or2, O_r_ic2, lambda, temp0,           &
@@ -131,7 +131,7 @@ contains
       complex(cp), intent(in) :: ddb_ic(llmMag:ulmMag,n_r_ic_maxMag)
       complex(cp), intent(in) :: aj_ic(llmMag:ulmMag,n_r_ic_maxMag)
       complex(cp), intent(in) :: dj_ic(llmMag:ulmMag,n_r_ic_maxMag)
-      real(cp),    intent(in) :: viscLMr(l_max+1,l_r:u_r)
+      real(cp),    intent(in) :: viscLMr(l_max+1,nRstart:nRstop)
 
       !-- Output:
       real(cp),    intent(out) :: viscDiss,ohmDiss
@@ -141,7 +141,7 @@ contains
       integer :: nTheta,nThetaStart,nThetaBlock,nThetaNHS
 
       real(cp) :: r_ratio
-      real(cp) :: viscHeatR(l_r:u_r)
+      real(cp) :: viscHeatR(nRstart:nRstop)
       real(cp) :: viscHeatR_global(n_r_max)
       real(cp) :: visc(nfs)
       real(cp) :: curlB2,buoy,curlB2_IC,buoy_chem,viscHeat
@@ -165,7 +165,7 @@ contains
       integer :: status(MPI_STATUS_SIZE)
 #endif
 
-      do n_r=l_r,u_r
+      do n_r=nRstart,nRstop
          viscHeatR(n_r)=0.0_cp
          do n=1,nThetaBs ! Loop over theta blocks
             nTheta=(n-1)*sizeThetaB

@@ -7,7 +7,7 @@ module rIterThetaBlocking_mod
    use geometry, only: lm_max,lmP_max,nrp,l_max,lmP_max_dtB,   &
        &                 n_phi_maxStr,n_theta_maxStr,n_r_maxStr, &
        &                 lm_maxMag,l_axi, n_lm_loc, n_lmMag_loc,     &
-       &                 n_r_cmb, n_r_icb, l_r, u_r
+       &                 n_r_cmb, n_r_icb, nRstart, nRstop
    use blocking, only: nfs
    use logic, only: l_mag,l_conv,l_mag_kin,l_heat,l_HT,l_anel,l_mag_LF,    &
        &            l_conv_nl, l_mag_nl, l_b_nl_cmb, l_b_nl_icb, l_rot_ic, &
@@ -67,11 +67,11 @@ contains
       !      of the field scalars.
       call this%leg_helper%initialize(n_lm_loc,n_lmMag_loc,l_max)
 
-      allocate( this%BsLast(n_phi_maxStr,n_theta_maxStr,l_r:u_r) )
-      allocate( this%BpLast(n_phi_maxStr,n_theta_maxStr,l_r:u_r) )
-      allocate( this%BzLast(n_phi_maxStr,n_theta_maxStr,l_r:u_r) )
+      allocate( this%BsLast(n_phi_maxStr,n_theta_maxStr,nRstart:nRstop) )
+      allocate( this%BpLast(n_phi_maxStr,n_theta_maxStr,nRstart:nRstop) )
+      allocate( this%BzLast(n_phi_maxStr,n_theta_maxStr,nRstart:nRstop) )
       bytes_allocated = bytes_allocated+ &
-                       3*n_phi_maxStr*n_theta_maxStr*(u_r-l_r+1)*& 
+                       3*n_phi_maxStr*n_theta_maxStr*(nRstop-nRstart+1)*& 
                        SIZEOF_DEF_REAL
 
    end subroutine allocate_common_arrays

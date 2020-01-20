@@ -56,7 +56,7 @@
 !    !
 !    function new_ml2r_sendrecv(container_from,container_to, s_type, r_type) result(self)
 !       complex(cp), target, intent(in) :: container_from(n_mlo_loc, n_r_max, *)
-!       complex(cp), target, intent(in) :: container_to(n_lm_loc, l_r:u_r, *)
+!       complex(cp), target, intent(in) :: container_to(n_lm_loc, nRstart:nRstop, *)
 !       integer, target, intent(in) :: s_type(:)
 !       integer, target, intent(in) :: r_type(:)
 !       type(ml2r_sendrecv_t) :: self
@@ -125,7 +125,7 @@
 !       do i=1,size(ml2r_loc_dspl,1)
 !          k = ml2r_loc_dspl(i,1)
 !          j = ml2r_loc_dspl(i,2)
-!          self%container_to(j,l_r:u_r,1:self%nfields) = self%container_from(k,l_r:u_r,1:self%nfields)
+!          self%container_to(j,nRstart:nRstop,1:self%nfields) = self%container_from(k,nRstart:nRstop,1:self%nfields)
 !       end do
 !    end subroutine ml2r_sendrecv_start
 !    

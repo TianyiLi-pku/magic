@@ -93,38 +93,38 @@ contains
       !---- Output of explicit time step:
       !---- dVSrLM and dVxBhLM are output of contributions to explicit time step that
       !     need a further treatment (radial derivatives required):
-      complex(cp), intent(out) :: dwdt(n_lm_loc,l_r:u_r)
-      complex(cp), intent(out) :: dzdt(n_lm_loc,l_r:u_r)
-      complex(cp), intent(out) :: dpdt(n_lm_loc,l_r:u_r)
-      complex(cp), intent(out) :: dsdt(n_lm_loc,l_r:u_r)
-      complex(cp), intent(out) :: dxidt(n_lmChe_loc,l_r_Che:u_r_Che)
-      complex(cp), intent(out) :: dVSrLM(n_lm_loc,l_r:u_r)
-      complex(cp), intent(out) :: dVPrLM(n_lmTP_loc,l_r_TP:u_r_TP)
-      complex(cp), intent(out) :: dVXirLM(n_lmChe_loc,l_r_Che:u_r_Che)
-      complex(cp), intent(out) :: dbdt(n_lmMag_loc,l_r_Mag:u_r_Mag)
-      complex(cp), intent(out) :: djdt(n_lmMag_loc,l_r_Mag:u_r_Mag)
-      complex(cp), intent(out) :: dVxVhLM(n_lmDC_loc,l_r_DC:u_r_DC)
-      complex(cp), intent(out) :: dVxBhLM(n_lmMag_loc,l_r_Mag:u_r_Mag)
+      complex(cp), intent(out) :: dwdt(n_lm_loc,nRstart:nRstop)
+      complex(cp), intent(out) :: dzdt(n_lm_loc,nRstart:nRstop)
+      complex(cp), intent(out) :: dpdt(n_lm_loc,nRstart:nRstop)
+      complex(cp), intent(out) :: dsdt(n_lm_loc,nRstart:nRstop)
+      complex(cp), intent(out) :: dxidt(n_lmChe_loc,nRstartChe:nRstopChe)
+      complex(cp), intent(out) :: dVSrLM(n_lm_loc,nRstart:nRstop)
+      complex(cp), intent(out) :: dVPrLM(n_lmTP_loc,nRstartTP:nRstopTP)
+      complex(cp), intent(out) :: dVXirLM(n_lmChe_loc,nRstartChe:nRstopChe)
+      complex(cp), intent(out) :: dbdt(n_lmMag_loc,nRstartMag:nRstopMag)
+      complex(cp), intent(out) :: djdt(n_lmMag_loc,nRstartMag:nRstopMag)
+      complex(cp), intent(out) :: dVxVhLM(n_lmDC_loc,nRstartDC:nRstopDC)
+      complex(cp), intent(out) :: dVxBhLM(n_lmMag_loc,nRstartMag:nRstopMag)
       real(cp),    intent(out) :: lorentz_torque_ma,lorentz_torque_ic
 
       !---- Output for axisymmetric helicity:
-      real(cp),    intent(out) :: HelLMr(l_max+1,l_r:u_r)
-      real(cp),    intent(out) :: Hel2LMr(l_max+1,l_r:u_r)
-      real(cp),    intent(out) :: HelnaLMr(l_max+1,l_r:u_r)
-      real(cp),    intent(out) :: Helna2LMr(l_max+1,l_r:u_r)
-      real(cp),    intent(out) :: uhLMr(l_max+1,l_r:u_r)
-      real(cp),    intent(out) :: duhLMr(l_max+1,l_r:u_r)
-      real(cp),    intent(out) :: viscLMr(l_max+1,l_r:u_r)
-      real(cp),    intent(out) :: gradsLMr(l_max+1,l_r:u_r)
-      real(cp),    intent(out) :: fkinLMr(l_max+1,l_r:u_r)
-      real(cp),    intent(out) :: fconvLMr(l_max+1,l_r:u_r)
-      real(cp),    intent(out) :: fviscLMr(l_max+1,l_r:u_r)
-      real(cp),    intent(out) :: fresLMr(l_maxMag+1,l_r_Mag:u_r_Mag)
-      real(cp),    intent(out) :: fpoynLMr(l_maxMag+1,l_r_Mag:u_r_Mag)
-      real(cp),    intent(out) :: EperpLMr(l_max+1,l_r:u_r)
-      real(cp),    intent(out) :: EparLMr(l_max+1,l_r:u_r)
-      real(cp),    intent(out) :: EperpaxiLMr(l_max+1,l_r:u_r)
-      real(cp),    intent(out) :: EparaxiLMr(l_max+1,l_r:u_r)
+      real(cp),    intent(out) :: HelLMr(l_max+1,nRstart:nRstop)
+      real(cp),    intent(out) :: Hel2LMr(l_max+1,nRstart:nRstop)
+      real(cp),    intent(out) :: HelnaLMr(l_max+1,nRstart:nRstop)
+      real(cp),    intent(out) :: Helna2LMr(l_max+1,nRstart:nRstop)
+      real(cp),    intent(out) :: uhLMr(l_max+1,nRstart:nRstop)
+      real(cp),    intent(out) :: duhLMr(l_max+1,nRstart:nRstop)
+      real(cp),    intent(out) :: viscLMr(l_max+1,nRstart:nRstop)
+      real(cp),    intent(out) :: gradsLMr(l_max+1,nRstart:nRstop)
+      real(cp),    intent(out) :: fkinLMr(l_max+1,nRstart:nRstop)
+      real(cp),    intent(out) :: fconvLMr(l_max+1,nRstart:nRstop)
+      real(cp),    intent(out) :: fviscLMr(l_max+1,nRstart:nRstop)
+      real(cp),    intent(out) :: fresLMr(l_maxMag+1,nRstartMag:nRstopMag)
+      real(cp),    intent(out) :: fpoynLMr(l_maxMag+1,nRstartMag:nRstopMag)
+      real(cp),    intent(out) :: EperpLMr(l_max+1,nRstart:nRstop)
+      real(cp),    intent(out) :: EparLMr(l_max+1,nRstart:nRstop)
+      real(cp),    intent(out) :: EperpaxiLMr(l_max+1,nRstart:nRstop)
+      real(cp),    intent(out) :: EparaxiLMr(l_max+1,nRstart:nRstop)
 
       !---- Output of nonlinear products for nonlinear
       !     magnetic boundary conditions (needed in s_updateB.f):
@@ -134,7 +134,7 @@ contains
       complex(cp), intent(out) :: br_vp_lm_icb(n_lmP_loc) ! product br*vp at ICB
 
       !---- Output for Courant criteria:
-      real(cp),intent(out) :: dtrkc(l_r:u_r),dthkc(l_r:u_r)
+      real(cp),intent(out) :: dtrkc(nRstart:nRstop),dthkc(nRstart:nRstop)
 
 
       !--- Local variables:
@@ -200,8 +200,8 @@ contains
            & lFluxProfCalc .or. lRmsCalc .or. lPowerCalc   &
            & .or. l_single_matrix ) lOutBc=.true.
 
-      !l_r=n_r_cmb
-      !u_r =n_r_icb-1
+      !nRstart=n_r_cmb
+      !nRstop =n_r_icb-1
 
       !--- Start the big do loop over the radial threads:
       
@@ -211,7 +211,7 @@ contains
       nRChe  = 1
       
       !nThreadsRmax=1
-      do nR=l_r,u_r
+      do nR=nRstart,nRstop
          !IF( nTh > nThreadsRmax ) nThreadsRmax=nTh
          if ( lVerbose ) then
             write(*,'(/," ! Starting radial level ",i4)') nR

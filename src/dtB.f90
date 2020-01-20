@@ -9,7 +9,7 @@ module dtB_mod
    use mem_alloc, only: bytes_allocated
    use geometry, only: nrp, n_r_maxMag, n_r_ic_maxMag, n_r_max, lm_max_dtB, &
        &                 n_r_max_dtB, n_r_ic_max_dtB, lm_max, n_cheb_max,     &
-       &                 n_r_ic_max, l_max, n_phi_max, ldtBmem, l_axi, l_r,u_r
+       &                 n_r_ic_max, l_max, n_phi_max, ldtBmem, l_axi, nRstart,nRstop
    use communications, only: gather_all_from_lo_to_rank0, gt_OC, gt_IC, &
        &                     r2lm_type, create_r2lm_type, destroy_r2lm_type, &
        &                     r2lo_redist_start, r2lo_redist_wait
@@ -121,16 +121,16 @@ contains
       bytes_allocated = bytes_allocated+ &
       &                 4*(ulmMag-llmMag+1)*n_r_ic_max_dtB*SIZEOF_DEF_COMPLEX
 
-      allocate( dtB_Rloc_container(lm_max_dtB,l_r:u_r,8) )
-      TomeLM_Rloc(1:lm_max_dtB,l_r:u_r) => dtB_Rloc_container(:,:,1)
-      TomeRLM_Rloc(1:lm_max_dtB,l_r:u_r) => dtB_Rloc_container(:,:,2)
-      TstrLM_Rloc(1:lm_max_dtB,l_r:u_r) => dtB_Rloc_container(:,:,3)
-      TstrRLM_Rloc(1:lm_max_dtB,l_r:u_r) => dtB_Rloc_container(:,:,4)
-      TadvLM_Rloc(1:lm_max_dtB,l_r:u_r) => dtB_Rloc_container(:,:,5)
-      TadvRLM_Rloc(1:lm_max_dtB,l_r:u_r) => dtB_Rloc_container(:,:,6)
-      PstrLM_Rloc(1:lm_max_dtB,l_r:u_r) => dtB_Rloc_container(:,:,7)
-      PadvLM_Rloc(1:lm_max_dtB,l_r:u_r) => dtB_Rloc_container(:,:,8)
-      bytes_allocated = bytes_allocated+8*(u_r-l_r+1)*lm_max_dtB* &
+      allocate( dtB_Rloc_container(lm_max_dtB,nRstart:nRstop,8) )
+      TomeLM_Rloc(1:lm_max_dtB,nRstart:nRstop) => dtB_Rloc_container(:,:,1)
+      TomeRLM_Rloc(1:lm_max_dtB,nRstart:nRstop) => dtB_Rloc_container(:,:,2)
+      TstrLM_Rloc(1:lm_max_dtB,nRstart:nRstop) => dtB_Rloc_container(:,:,3)
+      TstrRLM_Rloc(1:lm_max_dtB,nRstart:nRstop) => dtB_Rloc_container(:,:,4)
+      TadvLM_Rloc(1:lm_max_dtB,nRstart:nRstop) => dtB_Rloc_container(:,:,5)
+      TadvRLM_Rloc(1:lm_max_dtB,nRstart:nRstop) => dtB_Rloc_container(:,:,6)
+      PstrLM_Rloc(1:lm_max_dtB,nRstart:nRstop) => dtB_Rloc_container(:,:,7)
+      PadvLM_Rloc(1:lm_max_dtB,nRstart:nRstop) => dtB_Rloc_container(:,:,8)
+      bytes_allocated = bytes_allocated+8*(nRstop-nRstart+1)*lm_max_dtB* &
       &                 SIZEOF_DEF_COMPLEX
 
       allocate( dtB_LMloc_container(llmMag:ulmMag,n_r_max_dtB,8) )

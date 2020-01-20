@@ -13,7 +13,7 @@ module init_fields
    use geometry, only: n_r_max, nrp, n_r_maxMag,n_r_ic_max,lmP_max, &
        &                 n_phi_max,n_theta_max,n_r_tot,l_max,m_max,   &
        &                 l_axi,minc,n_cheb_ic_max,lm_max, n_r_icb,    &
-       &                 n_r_cmb, l_r, u_r
+       &                 n_r_cmb, nRstart, nRstop
    use mem_alloc, only: bytes_allocated
    use blocking, only: nfs, nThetaBs, sizeThetaB, lo_map,  &
        &               lmStartB, lmStopB
@@ -151,7 +151,7 @@ contains
       real(cp), intent(out) :: omega_ic,omega_ma
     
       !-- Local variables
-      complex(cp) :: z_Rloc(lm_max,l_r:u_r)
+      complex(cp) :: z_Rloc(lm_max,nRstart:nRstop)
       integer :: lm,l,m,n,st_lmP,l1m0
       integer :: nR,nTheta,nThetaB,nThetaStart,nPhi
       real(cp) :: ra1,ra2,c_r,c_i
@@ -175,7 +175,7 @@ contains
          call lo2r_redist_wait(lo2r_initv)
     
          !-- Approximating the Stewardson solution:
-         do nR=l_r,u_r
+         do nR=nRstart,nRstop
     
             nTheta=0
             do n=1,nThetaBs ! loop over the theta blocks
@@ -247,7 +247,7 @@ contains
          call lo2r_redist_wait(lo2r_initv)
     
          !-- Approximating the Stewardson solution:
-         do nR=l_r,u_r
+         do nR=nRstart,nRstop
     
             nTheta=0
             do n=1,nThetaBs ! loop over the theta blocks

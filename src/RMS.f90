@@ -13,7 +13,7 @@ module RMS
    use radial_scheme, only: type_rscheme
    use geometry, only: n_r_max, n_cheb_max, n_r_maxMag, lm_max, lm_maxMag, &
        &                 l_max, n_phi_max, n_theta_max, minc, n_r_max_dtB,   &
-       &                 lm_max_dtB, fd_ratio, fd_stretch, u_r, l_r, dist_r, &
+       &                 lm_max_dtB, fd_ratio, fd_stretch, nRstop, nRstart, dist_r, &
        &                 n_r_loc
    use physical_parameters, only: ra, ek, pr, prmag, radratio
    use radial_functions, only: rscheme_oc, r, r_cmb, r_icb, alph1, alph2

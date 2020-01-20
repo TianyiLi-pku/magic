@@ -9,8 +9,8 @@ module step_time_mod
    use mem_alloc, only: bytes_allocated, memWrite
    use geometry, only: n_r_max, l_max, l_maxMag, n_r_maxMag, &
        &                 lm_max, lmP_max, lm_maxMag, n_lm_loc,   &
-       &                 n_lmMag_loc, n_lmP_loc, l_r, u_r, l_r_Mag,&
-       &                 u_r_Mag, n_r_icb, n_r_cmb, n_mlo_loc, n_mloMag_loc
+       &                 n_lmMag_loc, n_lmP_loc, nRstart, nRstop, nRstartMag,&
+       &                 nRstopMag, n_r_icb, n_r_cmb, n_mlo_loc, n_mloMag_loc
    use num_param, only: n_time_steps, runTimeLimit, tEnd, dtMax, &
        &                dtMin, tScale, alpha, runTime
    use blocking, only: nLMBs, lmStartB, lmStopB
@@ -119,36 +119,36 @@ contains
       local_bytes_used = bytes_allocated
 
       if ( l_double_curl ) then
-         allocate( dflowdt_Rdist_container(n_lm_loc,l_r:u_r,1:4) )
-         dVxVhLM_dist(1:n_lm_loc,l_r:u_r) => dflowdt_Rdist_container(:,:,4)
-         bytes_allocated = bytes_allocated+ 4*n_lm_loc*(u_r-l_r+1)*SIZEOF_DEF_COMPLEX
+         allocate( dflowdt_Rdist_container(n_lm_loc,nRstart:nRstop,1:4) )
+         dVxVhLM_dist(1:n_lm_loc,nRstart:nRstop) => dflowdt_Rdist_container(:,:,4)
+         bytes_allocated = bytes_allocated+ 4*n_lm_loc*(nRstop-nRstart+1)*SIZEOF_DEF_COMPLEX
       else
-         allocate( dflowdt_Rdist_container(n_lm_loc,l_r:u_r,1:3) )
+         allocate( dflowdt_Rdist_container(n_lm_loc,nRstart:nRstop,1:3) )
          allocate( dVxVhLM_dist(1:1,1:1) )
-         bytes_allocated = bytes_allocated+ 3*n_lm_loc*(u_r-l_r+1)*SIZEOF_DEF_COMPLEX
+         bytes_allocated = bytes_allocated+ 3*n_lm_loc*(nRstop-nRstart+1)*SIZEOF_DEF_COMPLEX
       end if
-      dwdt_dist(1:n_lm_loc,l_r:u_r) => dflowdt_Rdist_container(:,:,1)
-      dzdt_dist(1:n_lm_loc,l_r:u_r) => dflowdt_Rdist_container(:,:,2)
-      dpdt_dist(1:n_lm_loc,l_r:u_r) => dflowdt_Rdist_container(:,:,3)
+      dwdt_dist(1:n_lm_loc,nRstart:nRstop) => dflowdt_Rdist_container(:,:,1)
+      dzdt_dist(1:n_lm_loc,nRstart:nRstop) => dflowdt_Rdist_container(:,:,2)
+      dpdt_dist(1:n_lm_loc,nRstart:nRstop) => dflowdt_Rdist_container(:,:,3)
       
 
       if ( l_TP_form ) then
-         allocate( dsdt_Rdist_container(n_lm_loc,l_r:u_r,1:3) )
-         dVPrLM_dist(1:n_lm_loc,l_r:u_r) => dsdt_Rdist_container(:,:,3)
-         bytes_allocated = bytes_allocated+ 3*n_lm_loc*(u_r-l_r+1)*SIZEOF_DEF_COMPLEX
+         allocate( dsdt_Rdist_container(n_lm_loc,nRstart:nRstop,1:3) )
+         dVPrLM_dist(1:n_lm_loc,nRstart:nRstop) => dsdt_Rdist_container(:,:,3)
+         bytes_allocated = bytes_allocated+ 3*n_lm_loc*(nRstop-nRstart+1)*SIZEOF_DEF_COMPLEX
       else
-         allocate( dsdt_Rdist_container(n_lm_loc,l_r:u_r,1:2) )
+         allocate( dsdt_Rdist_container(n_lm_loc,nRstart:nRstop,1:2) )
          allocate( dVPrLM_dist(1:1,1:1) )
-         bytes_allocated = bytes_allocated+ 2*n_lm_loc*(u_r-l_r+1)*SIZEOF_DEF_COMPLEX
+         bytes_allocated = bytes_allocated+ 2*n_lm_loc*(nRstop-nRstart+1)*SIZEOF_DEF_COMPLEX
       end if
-      dsdt_dist(1:n_lm_loc,l_r:u_r)   => dsdt_Rdist_container(:,:,1)
-      dVSrLM_dist(1:n_lm_loc,l_r:u_r) => dsdt_Rdist_container(:,:,2)
+      dsdt_dist(1:n_lm_loc,nRstart:nRstop)   => dsdt_Rdist_container(:,:,1)
+      dVSrLM_dist(1:n_lm_loc,nRstart:nRstop) => dsdt_Rdist_container(:,:,2)
 
       if ( l_chemical_conv ) then
-         allocate( dxidt_Rdist_container(n_lm_loc,l_r:u_r,1:2) )
-         dxidt_dist(1:n_lm_loc,l_r:u_r)   => dxidt_Rdist_container(:,:,1)
-         dVXirLM_dist(1:n_lm_loc,l_r:u_r) => dxidt_Rdist_container(:,:,2)
-         bytes_allocated = bytes_allocated+2*n_lm_loc*(u_r-l_r+1)*SIZEOF_DEF_COMPLEX
+         allocate( dxidt_Rdist_container(n_lm_loc,nRstart:nRstop,1:2) )
+         dxidt_dist(1:n_lm_loc,nRstart:nRstop)   => dxidt_Rdist_container(:,:,1)
+         dVXirLM_dist(1:n_lm_loc,nRstart:nRstop) => dxidt_Rdist_container(:,:,2)
+         bytes_allocated = bytes_allocated+2*n_lm_loc*(nRstop-nRstart+1)*SIZEOF_DEF_COMPLEX
       else
          allocate( dxidt_Rdist_container(1,1,1:2) )
          dxidt_dist(1:1,1:1)   => dxidt_Rdist_container(:,:,1)
@@ -157,14 +157,14 @@ contains
       end if
 
       ! the magnetic part
-      allocate( dbdt_Rdist_container(n_lmMag_loc,l_r_Mag:u_r_Mag,1:3) )
-      dbdt_dist(1:n_lmMag_loc,l_r_Mag:u_r_Mag)   => dbdt_Rdist_container(:,:,1)
-      djdt_dist(1:n_lmMag_loc,l_r_Mag:u_r_Mag)   => dbdt_Rdist_container(:,:,2)
-      dVxBhLM_dist(1:n_lmMag_loc,l_r_Mag:u_r_Mag)=> dbdt_Rdist_container(:,:,3)
-      bytes_allocated = bytes_allocated+ 3*n_lmMag_loc*(u_r_Mag-l_r_Mag+1)*SIZEOF_DEF_COMPLEX
+      allocate( dbdt_Rdist_container(n_lmMag_loc,nRstartMag:nRstopMag,1:3) )
+      dbdt_dist(1:n_lmMag_loc,nRstartMag:nRstopMag)   => dbdt_Rdist_container(:,:,1)
+      djdt_dist(1:n_lmMag_loc,nRstartMag:nRstopMag)   => dbdt_Rdist_container(:,:,2)
+      dVxBhLM_dist(1:n_lmMag_loc,nRstartMag:nRstopMag)=> dbdt_Rdist_container(:,:,3)
+      bytes_allocated = bytes_allocated+ 3*n_lmMag_loc*(nRstopMag-nRstartMag+1)*SIZEOF_DEF_COMPLEX
 
       ! first touch dist
-      do nR=l_r,u_r
+      do nR=nRstart,nRstop
          do lm=1,n_lm_loc
             if ( l_mag ) then
                dbdt_dist(lm,nR)=zero
@@ -338,7 +338,7 @@ contains
       !--- Courant criteria/diagnosis:
       real(cp) :: dtr,dth
       !-- Saves values for time step
-      real(cp) :: dtrkc_Rloc(l_r:u_r), dthkc_Rloc(l_r:u_r) 
+      real(cp) :: dtrkc_Rloc(nRstart:nRstop), dthkc_Rloc(nRstart:nRstop) 
 
       !--- Explicit part of time stepping, calculated in s_radialLoopG.f and
       !    passed to LMLoop.f where the time step is preformed.
@@ -350,23 +350,23 @@ contains
       real(cp) :: lorentz_torque_ma,lorentz_torque_ic
 
       !-- Arrays for m_outMisc.F90 and m_outPar.F90
-      real(cp) :: HelLMr_Rloc(l_max+1,l_r:u_r)
-      real(cp) :: Hel2LMr_Rloc(l_max+1,l_r:u_r)
-      real(cp) :: HelnaLMr_Rloc(l_max+1,l_r:u_r)
-      real(cp) :: Helna2LMr_Rloc(l_max+1,l_r:u_r)
-      real(cp) :: viscLMr_Rloc(l_max+1,l_r:u_r)
-      real(cp) :: uhLMr_Rloc(l_max+1,l_r:u_r)
-      real(cp) :: duhLMr_Rloc(l_max+1,l_r:u_r)
-      real(cp) :: gradsLMr_Rloc(l_max+1,l_r:u_r)
-      real(cp) :: fconvLMr_Rloc(l_max+1,l_r:u_r)
-      real(cp) :: fkinLMr_Rloc(l_max+1,l_r:u_r)
-      real(cp) :: fviscLMr_Rloc(l_max+1,l_r:u_r)
-      real(cp) :: fpoynLMr_Rloc(l_maxMag+1,l_r_Mag:u_r_Mag)
-      real(cp) :: fresLMr_Rloc(l_maxMag+1,l_r_Mag:u_r_Mag)
-      real(cp) :: EperpLMr_Rloc(l_max+1,l_r:u_r)
-      real(cp) :: EparLMr_Rloc(l_max+1,l_r:u_r)
-      real(cp) :: EperpaxiLMr_Rloc(l_max+1,l_r:u_r)
-      real(cp) :: EparaxiLMr_Rloc(l_max+1,l_r:u_r)
+      real(cp) :: HelLMr_Rloc(l_max+1,nRstart:nRstop)
+      real(cp) :: Hel2LMr_Rloc(l_max+1,nRstart:nRstop)
+      real(cp) :: HelnaLMr_Rloc(l_max+1,nRstart:nRstop)
+      real(cp) :: Helna2LMr_Rloc(l_max+1,nRstart:nRstop)
+      real(cp) :: viscLMr_Rloc(l_max+1,nRstart:nRstop)
+      real(cp) :: uhLMr_Rloc(l_max+1,nRstart:nRstop)
+      real(cp) :: duhLMr_Rloc(l_max+1,nRstart:nRstop)
+      real(cp) :: gradsLMr_Rloc(l_max+1,nRstart:nRstop)
+      real(cp) :: fconvLMr_Rloc(l_max+1,nRstart:nRstop)
+      real(cp) :: fkinLMr_Rloc(l_max+1,nRstart:nRstop)
+      real(cp) :: fviscLMr_Rloc(l_max+1,nRstart:nRstop)
+      real(cp) :: fpoynLMr_Rloc(l_maxMag+1,nRstartMag:nRstopMag)
+      real(cp) :: fresLMr_Rloc(l_maxMag+1,nRstartMag:nRstopMag)
+      real(cp) :: EperpLMr_Rloc(l_max+1,nRstart:nRstop)
+      real(cp) :: EparLMr_Rloc(l_max+1,nRstart:nRstop)
+      real(cp) :: EperpaxiLMr_Rloc(l_max+1,nRstart:nRstop)
+      real(cp) :: EparaxiLMr_Rloc(l_max+1,nRstart:nRstop)
 
       !--- Nonlinear magnetic boundary conditions needed in s_updateB.f :
       complex(cp) :: br_vt_lm_cmb(n_lmP_loc)    ! product br*vt at CMB
